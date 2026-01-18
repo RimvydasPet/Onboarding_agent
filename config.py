@@ -185,8 +185,8 @@ OFFICIAL_DOC_URLS = {
         "https://pip.pypa.io/en/stable/",
         "https://pip.pypa.io/en/stable/getting-started.html",
     ],
-    "setuptools": [
         "https://setuptools.pypa.io/en/latest/",
+    "setuptools": [
         "https://setuptools.pypa.io/en/latest/userguide.html",
     ]
 }
