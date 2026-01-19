@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 class Reranker:
     def __init__(self):
         self.llm = ChatGoogleGenerativeAI(
-            model="gemini-pro",
+            model="gemini-2.0-flash-exp",
             google_api_key=settings.GOOGLE_API_KEY,
             temperature=0
         )

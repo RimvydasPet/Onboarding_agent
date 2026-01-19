@@ -64,7 +64,7 @@ def initialize_system():
 @st.cache_resource
 def get_llm():
     return ChatGoogleGenerativeAI(
-        model="gemini-pro",
+        model="gemini-2.0-flash-exp",
         google_api_key=settings.GOOGLE_API_KEY,
         temperature=0.7
     )

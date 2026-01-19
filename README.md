@@ -98,7 +98,7 @@ The AI Onboarding Assistant is a conversational AI agent designed to guide new u
                          ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                   Google Gemini AI                           │
-│              (gemini-pro model)                              │
+│              (gemini-2.0-flash-exp model)                    │
 └────────────────────────┬────────────────────────────────────┘
                          │
          ┌───────────────┼───────────────┐
