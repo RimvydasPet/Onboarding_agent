@@ -1,17 +1,15 @@
 # 🤖 AI Onboarding Assistant
 
-An intelligent onboarding assistant powered by LangGraph, Agentic RAG, and dual-layer memory systems. This agent helps new users get started with your platform through conversational guidance, context-aware responses, and personalized onboarding experiences.
+An intelligent onboarding assistant powered by Google Gemini AI with dual-layer memory systems. This agent helps new users get started with your platform through conversational guidance, context-aware responses, and personalized onboarding experiences.
 
 ## 📋 Table of Contents
 
 - [Agent Purpose](#agent-purpose)
 - [Features](#features)
-- [Architecture](#architecture)
 - [Installation](#installation)
 - [Usage](#usage)
-- [Technical Implementation](#technical-implementation)
-- [Documentation](#documentation)
-- [Task Requirements Coverage](#task-requirements-coverage)
+- [Project Structure](#project-structure)
+- [Configuration](#configuration)
 
 ---
 
@@ -48,14 +46,14 @@ The AI Onboarding Assistant is a conversational AI agent designed to guide new u
 
 ### Core Functionality
 
-#### 1. **Agentic RAG System** (HARD Task ✅)
-- **Intelligent Query Planning**: Analyzes user intent and determines optimal retrieval strategy
-- **Multi-Strategy Retrieval**: Uses similarity search and Maximum Marginal Relevance (MMR)
-- **Document Reranking**: Prioritizes most relevant information
-- **Source Validation**: Ensures quality and relevance of retrieved content
-- **Citation Generation**: Provides sources for transparency
+#### 1. **Conversational AI Interface**
+- Beautiful, intuitive Streamlit-based chat interface
+- Real-time conversation with Google Gemini AI
+- Stage-based onboarding flow (5 stages)
+- Progress tracking and visualization
+- Session management
 
-#### 2. **Dual-Layer Memory System** (MEDIUM Task 1 ✅)
+#### 2. **Dual-Layer Memory System**
 - **Short-Term Memory**: Redis-based session storage for conversation context
   - Message history with TTL expiration
   - Session context tracking
@@ -68,16 +66,7 @@ The AI Onboarding Assistant is a conversational AI agent designed to guide new u
   - Access count tracking
   - Onboarding progress persistence
 
-#### 3. **LangGraph Conversation Agent**
-- **State Management**: Tracks conversation state across multiple turns
-- **5-Node Processing Pipeline**:
-  1. Analyze Input - Determine user intent and retrieval needs
-  2. Load Memory - Retrieve relevant context from both memory layers
-  3. Retrieve Context - Fetch documentation using RAG
-  4. Generate Response - Create contextual, helpful responses
-  5. Save Memory - Persist conversation for future reference
-
-#### 4. **Onboarding Flow Management**
+#### 3. **Onboarding Flow Management**
 - **5 Structured Stages**:
   - Welcome - Initial greeting and introduction
   - Profile Setup - User profile configuration
@@ -88,12 +77,11 @@ The AI Onboarding Assistant is a conversational AI agent designed to guide new u
 - **Progress Tracking**: Monitors completed steps and current stage
 - **Adaptive Guidance**: Adjusts responses based on user's stage
 
-#### 5. **Interactive Chat Interface**
-- Beautiful Streamlit-based UI
-- Real-time conversation
-- Source citation display
-- Progress visualization
-- Session management
+#### 4. **Context-Aware Responses**
+- Stage-specific prompts and guidance
+- Conversation history integration
+- User preference tracking
+- Personalized recommendations
 
 ---
 
@@ -103,43 +91,36 @@ The AI Onboarding Assistant is a conversational AI agent designed to guide new u
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                     User Interface (Streamlit)               │
-│  - Chat Interface  - Progress Tracking  - Source Display    │
+│                  Streamlit Chat Interface                    │
+│         Beautiful UI with Progress Tracking                  │
 └────────────────────────┬────────────────────────────────────┘
                          │
-┌────────────────────────▼────────────────────────────────────┐
-│                   LangGraph Agent                            │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐   │
-│  │ Analyze  │→ │  Load    │→ │ Retrieve │→ │ Generate │   │
-│  │  Input   │  │  Memory  │  │ Context  │  │ Response │   │
-│  └──────────┘  └──────────┘  └──────────┘  └──────────┘   │
+                         ▼
+┌─────────────────────────────────────────────────────────────┐
+│                   Google Gemini AI                           │
+│              (gemini-pro model)                              │
 └────────────────────────┬────────────────────────────────────┘
                          │
          ┌───────────────┼───────────────┐
          │               │               │
-┌────────▼────────┐ ┌───▼────────┐ ┌───▼──────────┐
-│  Agentic RAG    │ │  Memory    │ │  Database    │
-│                 │ │  Systems   │ │              │
-│ - Query Plan    │ │            │ │ - Users      │
-│ - Vector Store  │ │ Short-term │ │ - Profiles   │
-│ - Reranking     │ │ (Redis)    │ │ - Messages   │
-│ - Citations     │ │            │ │ - Memories   │
-│                 │ │ Long-term  │ │ - Documents  │
-│                 │ │ (SQL)      │ │              │
-└─────────────────┘ └────────────┘ └──────────────┘
+         ▼               ▼               ▼
+┌────────────────┐ ┌────────────┐ ┌──────────────┐
+│  Short-Term    │ │ Long-Term  │ │  SQLite DB   │
+│  Memory        │ │ Memory     │ │              │
+│  (Redis/       │ │ (SQL)      │ │ - Users      │
+│   In-Memory)   │ │            │ │ - Profiles   │
+│                │ │            │ │ - Messages   │
+└────────────────┘ └────────────┘ └──────────────┘
 ```
 
 ### Technology Stack
 
-- **LangGraph**: State machine for conversation flow
-- **LangChain**: LLM orchestration and RAG components
-- **Google Gemini**: LLM for response generation and query analysis
-- **ChromaDB**: Vector database for document embeddings
-- **SQLAlchemy**: ORM for persistent storage
-- **Redis**: In-memory cache for session data
-- **FastAPI**: REST API backend
+- **Google Gemini Pro**: LLM for conversational responses
 - **Streamlit**: Interactive web interface
+- **SQLAlchemy**: ORM for persistent storage
+- **Redis**: In-memory cache for session data (optional, with fallback)
 - **Pydantic**: Data validation and settings management
+- **Python 3.11+**: Core programming language
 
 ---
 
@@ -162,29 +143,23 @@ git checkout feature/complete-onboarding-agent
 ### Step 2: Install Dependencies
 
 ```bash
-pip install -r requirements_new.txt
+pip install -r requirements.txt
 ```
 
 ### Step 3: Configure Environment
 
 ```bash
-cp .env.new .env
+cp .env.example .env
 ```
 
-Edit `.env` and add your Google API key:
+Edit `.env` and add your Google API key from https://aistudio.google.com/app/apikey:
 
 ```env
 GOOGLE_API_KEY=your_google_api_key_here
 SECRET_KEY=your-secret-key-change-in-production
 ```
 
-### Step 4: Initialize Database
-
-```bash
-python test_setup.py
-```
-
-### Step 5: (Optional) Install Redis
+### Step 4: (Optional) Install Redis
 
 **macOS:**
 ```bash
@@ -207,133 +182,39 @@ Download from https://redis.io/download
 
 ### Quick Start
 
-#### Option 1: Interactive Chat Interface (Recommended)
+#### Run the Chat Interface
 
 ```bash
-streamlit run chat_app.py
+streamlit run simple_chat_app.py
 ```
 
 Open your browser to `http://localhost:8501`
 
-#### Option 2: Demo UI (System Overview)
+The interface will show:
+- 💬 Interactive chat with the AI assistant
+- 🎯 Progress tracking through 5 onboarding stages
+- 📊 Session statistics and metrics
+- 🎨 Beautiful purple gradient UI
 
-```bash
-streamlit run demo_app.py
-```
+### Try These Questions
 
-#### Option 3: FastAPI Backend
+Once the app is running, try asking:
 
-```bash
-uvicorn backend.main:app --reload
-```
+- "How do I create a new project?"
+- "What features are available?"
+- "Tell me about getting started"
+- "I need help with my account"
+- "What are the keyboard shortcuts?"
 
-API docs at `http://localhost:8000/docs`
-
-### Common Use Cases
-
-#### Example 1: Getting Started
-
-**User:** "How do I create a new project?"
-
-**Agent:** 
-- Analyzes query intent (question about features)
-- Retrieves relevant documentation from RAG
-- Provides step-by-step instructions
-- Cites sources from documentation
-- Offers to help with next steps
-
-#### Example 2: Troubleshooting
-
-**User:** "I can't log in to my account"
-
-**Agent:**
-- Identifies troubleshooting intent
-- Retrieves common login issues
-- Provides solutions in order of likelihood
-- Remembers issue for future reference
-- Escalates to support if needed
-
-#### Example 3: Learning Preferences
-
-**User:** "I prefer video tutorials over text"
-
-**Agent:**
-- Saves preference to long-term memory
-- Adjusts future recommendations
-- Suggests video resources
-- Tracks preference for personalization
-
-### Programmatic Usage
-
-```python
-from backend.agent.graph import run_agent
-
-# Run agent with user input
-result = run_agent(
-    user_input="How do I get started?",
-    user_id=1,
-    session_id="unique-session-id",
-    current_stage="welcome"
-)
-
-print(result["response"])
-print(result["retrieved_docs"])  # Source citations
-```
-
-### Testing RAG System
-
-```bash
-python backend/rag/initializer.py
-```
-
-This will:
-- Initialize the RAG system
-- Load sample documents
-- Run test queries
-- Display retrieval results
+The assistant will:
+- Provide helpful, context-aware responses
+- Remember your conversation history
+- Track your progress through onboarding stages
+- Save important preferences to long-term memory
 
 ---
 
 ## 🔧 Technical Implementation
-
-### Agentic RAG Pipeline
-
-#### 1. Query Analysis
-```python
-# Analyzes user intent, topic, and complexity
-analysis = query_planner.analyze_query(query, context)
-# Returns: intent, topic, complexity, requires_retrieval, keywords
-```
-
-#### 2. Retrieval Strategy Planning
-```python
-# Determines optimal retrieval approach
-strategy = query_planner.plan_retrieval_strategy(analysis)
-# Simple queries: similarity search (k=3)
-# Complex queries: MMR with reranking (k=7, fetch_k=20)
-```
-
-#### 3. Multi-Query Retrieval
-```python
-# Generates multiple search queries for better coverage
-search_queries = query_planner.generate_search_queries(query, analysis)
-# Combines original query with topic-specific and keyword variations
-```
-
-#### 4. Document Reranking
-```python
-# Scores and reranks documents by relevance
-reranked_docs = reranker.rerank_documents(query, documents, top_k=5)
-# Uses keyword overlap, exact matches, and metadata signals
-```
-
-#### 5. Source Validation & Citation
-```python
-# Validates quality and generates citations
-validated = reranker.validate_sources(documents)
-citations = reranker.add_citations(validated)
-# Includes source, relevance score, and chunk information
-```
 
 ### Memory Integration
 
@@ -365,27 +246,23 @@ memories = long_term_memory.get_important_memories(user_id, min_importance=3)
 
 ### Error Handling
 
-The system includes comprehensive error handling:
-
 - **Redis Connection Failures**: Automatic fallback to in-memory storage
-- **LLM API Errors**: Graceful degradation with error messages
-- **RAG Retrieval Failures**: Returns empty results with explanation
-- **Database Errors**: Logged with user-friendly messages
-- **Invalid Input**: Validation with helpful error messages
+- **LLM API Errors**: Displays user-friendly error messages
+- **Database Errors**: Logged with helpful context
+- **Invalid Input**: Validation with clear feedback
 
 ### Configuration
 
-All settings managed through `backend/config.py`:
+Settings are managed through `.env` file:
 
-```python
-class Settings(BaseSettings):
-    GOOGLE_API_KEY: str
-    DATABASE_URL: str = "sqlite:///./onboarding.db"
-    REDIS_URL: str = "redis://localhost:6379/0"
-    SECRET_KEY: str
-    CHROMA_PERSIST_DIRECTORY: str = "./chroma_db"
-    # ... more settings
+```env
+GOOGLE_API_KEY=your_api_key_here
+DATABASE_URL=sqlite:///./onboarding.db
+REDIS_URL=redis://localhost:6379/0
+SECRET_KEY=your-secret-key
 ```
+
+Configuration is loaded via `backend/config.py` using Pydantic Settings
 
 ---
 
@@ -436,18 +313,6 @@ Response:
 
 ### Architecture Decisions
 
-#### Why LangGraph?
-- **State Management**: Built-in state persistence across conversation turns
-- **Flexibility**: Easy to add/modify nodes in the processing pipeline
-- **Debugging**: Clear visualization of conversation flow
-- **Scalability**: Handles complex multi-step reasoning
-
-#### Why Agentic RAG?
-- **Better Accuracy**: Query planning improves retrieval relevance
-- **Transparency**: Citations build user trust
-- **Adaptability**: Different strategies for different query types
-- **Quality**: Reranking ensures best results surface first
-
 #### Why Dual-Layer Memory?
 - **Performance**: Redis provides fast session access
 - **Persistence**: SQL ensures important data isn't lost
@@ -464,7 +329,7 @@ Response:
 - ✅ Target users identified: New users, product teams, support teams
 
 ### 2. Core Functionality ✅
-- ✅ Main features implemented: RAG, conversation agent, memory systems
+- ✅ Main features implemented: Conversational AI, memory systems, stage management
 - ✅ Primary tasks effective: Answers questions, guides onboarding
 - ✅ User interactions included: Chat interface, progress tracking
 
@@ -474,76 +339,61 @@ Response:
 - ✅ All functionalities accessible: Chat, sources, progress, settings
 
 ### 4. Technical Implementation ✅
-- ✅ Appropriate tools: LangGraph, LangChain, Gemini, ChromaDB, Redis, SQL
+- ✅ Appropriate tools: Google Gemini, Streamlit, SQLAlchemy, Redis
 - ✅ Error handling: Redis fallback, API error handling, validation
 - ✅ Real-world usage: Session management, persistence, scalability
 
 ### 5. Documentation ✅
 - ✅ Clear usage documentation: Installation, usage, examples
-- ✅ Common use cases: Getting started, troubleshooting, preferences
+- ✅ Common use cases included
 - ✅ Technical decisions: Architecture rationale explained
 
-### Bonus Tasks
+### Implementation Status
 
-#### MEDIUM Task 1: Memory Systems ✅
-- ✅ Short-term memory with Redis (with fallback)
-- ✅ Long-term memory with SQL
-- ✅ Importance scoring and access tracking
-- ✅ Integration with LangGraph agent
-
-#### MEDIUM Task 2: Authentication ⏳
-- ⚠️ JWT token generation (implemented but not integrated)
-- ⚠️ User registration/login (pending)
-- ⚠️ Protected endpoints (pending)
-
-#### HARD Task: Agentic RAG ✅
-- ✅ Document processing and chunking
-- ✅ Vector embeddings with ChromaDB
-- ✅ Query planning with intent analysis
-- ✅ Multi-strategy retrieval (similarity + MMR)
-- ✅ Document reranking
-- ✅ Source validation and citations
+#### ✅ Completed Features
+- **Conversational AI Interface**: Beautiful Streamlit chat with purple gradient UI
+- **Memory Systems**: Dual-layer (Redis + SQL) with fallback support
+- **Onboarding Flow**: 5-stage progression with tracking
+- **Session Management**: Unique session IDs and context preservation
+- **Error Handling**: Graceful degradation and user-friendly messages
+- **Progress Visualization**: Real-time metrics and stage indicators
 
 ---
 
 ## 🧪 Testing
 
-### Run All Tests
-
-```bash
-# Test basic setup
-python test_setup.py
-
-# Test RAG system
-python backend/rag/initializer.py
-
-# Test agent
-python -c "from backend.agent.graph import run_agent; print(run_agent('How do I get started?'))"
-```
-
 ### Manual Testing
 
-1. Start chat interface: `streamlit run chat_app.py`
+1. Start chat interface: `streamlit run simple_chat_app.py`
 2. Try these queries:
    - "How do I create a new project?"
-   - "What are the keyboard shortcuts?"
-   - "I can't log in"
-   - "Tell me about the mobile app"
-   - "I prefer video tutorials"
+   - "What features are available?"
+   - "Tell me about getting started"
+   - "I need help with my account"
+3. Test stage progression by changing stages in the sidebar
+4. Verify memory by asking follow-up questions
+5. Check session management with "New Session" button
 
 ---
 
-## 📊 Project Status
+## 📊 Project Structure
 
-**Overall Completion: ~85%**
-
-- ✅ Memory Systems (MEDIUM Task 1) - 100%
-- ✅ Agentic RAG (HARD Task) - 100%
-- ✅ LangGraph Agent - 100%
-- ✅ Chat Interface - 100%
-- ✅ Documentation - 100%
-- ⏳ Authentication (MEDIUM Task 2) - 30%
-- ✅ Error Handling - 80%
+```
+Onboarding_agent/
+├── backend/
+│   ├── agent/           # Agent implementation (advanced features)
+│   ├── rag/             # RAG system (advanced features)
+│   ├── memory/          # Memory systems (active)
+│   ├── database/        # SQLAlchemy models (active)
+│   ├── models/          # Pydantic schemas (active)
+│   ├── auth/            # Authentication (foundation)
+│   └── config.py        # Configuration management
+├── simple_chat_app.py   # Main chat interface ⭐
+├── requirements.txt     # Dependencies
+├── README.md            # This file
+├── .env.example         # Environment template
+└── .env                 # Your configuration (gitignored)
+```
 
 ---
 
