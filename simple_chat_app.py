@@ -8,7 +8,11 @@ from backend.database.connection import init_db
 from backend.memory.short_term import ShortTermMemory
 from backend.memory.long_term import LongTermMemory
 from backend.database.connection import get_db
+from backend.utils.voice_input import VoiceInputHandler
+from backend.utils.continuous_voice import ContinuousVoiceListener
+from backend.services.task_manager import TaskManager
 import logging
+import time
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -81,6 +85,20 @@ if "current_stage" not in st.session_state:
 if "user_id" not in st.session_state:
     st.session_state.user_id = 1
 
+if "voice_handler" not in st.session_state:
+    st.session_state.voice_handler = VoiceInputHandler(language="en-US")
+
+if "listening" not in st.session_state:
+    st.session_state.listening = False
+
+if "voice_text" not in st.session_state:
+    st.session_state.voice_text = ""
+
+if "continuous_listener" not in st.session_state:
+    st.session_state.continuous_listener = ContinuousVoiceListener(session_id=st.session_state.session_id, language="en-US")
+    st.session_state.voice_enabled = False
+    st.session_state.processing_response = False
+
 memory = initialize_system()
 llm = get_llm()
 
@@ -105,6 +123,26 @@ for i, (stage_id, stage_name, emoji) in enumerate(stages):
         st.sidebar.markdown(f"{emoji} {stage_name}")
 
 st.sidebar.markdown("---")
+st.sidebar.markdown("### ✅ Current Stage Tasks")
+
+db = next(get_db())
+task_manager = TaskManager(db)
+task_manager.initialize_stage_tasks(st.session_state.user_id, st.session_state.current_stage)
+tasks = task_manager.get_stage_tasks(st.session_state.user_id, st.session_state.current_stage)
+progress = task_manager.get_stage_progress(st.session_state.user_id, st.session_state.current_stage)
+
+for task in tasks:
+    checkbox = "✅" if task["completed"] else "⬜"
+    task_style = "~~" if task["completed"] else ""
+    optional_tag = " (optional)" if task["optional"] else ""
+    st.sidebar.markdown(f"{checkbox} {task_style}{task['description']}{task_style}{optional_tag}")
+
+if progress['stage_complete']:
+    st.sidebar.success("🎉 Stage Complete! Ready to advance.")
+else:
+    st.sidebar.info(f"📊 {progress['required_completed']}/{progress['required_total']} required tasks done")
+
+st.sidebar.markdown("---")
 st.sidebar.markdown(f"**Session:** `{st.session_state.session_id[:8]}...`")
 st.sidebar.markdown(f"**Messages:** {len(st.session_state.messages)}")
 
@@ -115,8 +153,10 @@ if st.sidebar.button("🔄 New Session"):
     st.rerun()
 
 st.sidebar.markdown("---")
+st.sidebar.markdown("### ⚙️ Manual Stage Control")
+st.sidebar.caption("(Normally auto-advances when tasks complete)")
 new_stage = st.sidebar.selectbox(
-    "Change stage:",
+    "Override stage:",
     [s[0] for s in stages],
     index=current_stage_index,
     format_func=lambda x: next(s[1] for s in stages if s[0] == x)
@@ -139,9 +179,52 @@ for message in st.session_state.messages:
     else:
         st.markdown(f'<div class="chat-message assistant-message"><strong>🤖 Assistant:</strong><br>{content}</div>', unsafe_allow_html=True)
 
-user_input = st.chat_input("Ask me anything about getting started...")
+# Voice control and chat input in same row
+col_input, col_voice = st.columns([5, 1])
+
+with col_input:
+    # Check for voice input from file
+    voice_input = None
+    if st.session_state.voice_enabled:
+        voice_input = st.session_state.continuous_listener.read_voice_text()
+        if voice_input:
+            st.info(f"🎤 Voice: {voice_input}")
+    
+    # Get user input (voice or text)
+    if voice_input:
+        user_input = voice_input
+    else:
+        voice_status = "🔴 Voice ON" if st.session_state.voice_enabled else "🎤 Voice OFF"
+        user_input = st.chat_input(f"Ask me anything... [{voice_status}]")
+    
+    # Auto-refresh to check for voice input
+    if st.session_state.voice_enabled and not user_input:
+        time.sleep(0.3)
+        st.rerun()
+
+with col_voice:
+    if st.session_state.voice_enabled:
+        if st.button("🔴", use_container_width=True, type="primary", help="Stop voice recognition"):
+            st.session_state.continuous_listener.stop()
+            st.session_state.voice_enabled = False
+            st.rerun()
+    else:
+        if st.button("🎤", use_container_width=True, type="secondary", help="Start continuous voice recognition"):
+            if ContinuousVoiceListener.is_microphone_available():
+                st.session_state.continuous_listener.start()
+                st.session_state.voice_enabled = True
+                st.rerun()
+            else:
+                st.error("❌ Microphone not available")
 
 if user_input:
+    # Pause voice recognition while processing
+    was_voice_enabled = st.session_state.voice_enabled
+    if was_voice_enabled:
+        st.session_state.continuous_listener.stop()
+        st.session_state.voice_enabled = False
+        st.session_state.processing_response = True
+    
     st.session_state.messages.append({
         "role": "user",
         "content": user_input,
@@ -150,7 +233,7 @@ if user_input:
     
     memory.save_message(st.session_state.session_id, "user", user_input)
     
-    with st.spinner("🤔 Thinking..."):
+    with st.spinner("🤔 Thinking... (Voice paused)"):
         try:
             stage_prompts = {
                 "welcome": "You are greeting a new user. Be warm and welcoming.",
@@ -197,6 +280,18 @@ Provide helpful, concise answers. Be encouraging and supportive."""
                 f"message_{len(st.session_state.messages)}"
             )
             
+            # Check if stage is complete and auto-advance
+            task_mgr = TaskManager(db)
+            if task_mgr.is_stage_complete(st.session_state.user_id, st.session_state.current_stage):
+                # Find next stage
+                stage_order = [s[0] for s in stages]
+                current_idx = stage_order.index(st.session_state.current_stage)
+                if current_idx < len(stage_order) - 1:
+                    next_stage = stage_order[current_idx + 1]
+                    st.session_state.current_stage = next_stage
+                    task_mgr.initialize_stage_tasks(st.session_state.user_id, next_stage)
+                    st.success(f"🎉 Stage complete! Moving to: {stages[current_idx + 1][1]}")
+            
         except Exception as e:
             logger.error(f"Error: {e}")
             st.session_state.messages.append({
@@ -205,30 +300,38 @@ Provide helpful, concise answers. Be encouraging and supportive."""
                 "timestamp": datetime.now().isoformat()
             })
     
+    # Resume voice recognition after response
+    if was_voice_enabled:
+        time.sleep(1)  # Brief pause before resuming
+        st.session_state.continuous_listener.start()
+        st.session_state.voice_enabled = True
+        st.session_state.processing_response = False
+    
     st.rerun()
 
 if len(st.session_state.messages) == 0:
     st.markdown("""
     <div style="text-align: center; padding: 3rem; color: #666;">
         <h3>👋 Welcome! I'm your onboarding assistant.</h3>
-        <p>I'm here to help you get started with our platform.</p>
-        <p>Try asking me:</p>
-        <ul style="list-style: none; padding: 0;">
-            <li>• "How do I create a new project?"</li>
-            <li>• "What features are available?"</li>
-            <li>• "Tell me about getting started"</li>
-            <li>• "I need help with my account"</li>
-        </ul>
+        <p>I'll guide you step-by-step through getting started.</p>
+        <p><strong>I'll ask you questions to complete each task.</strong></p>
+        <p>Check the sidebar to see your current tasks and progress!</p>
+        <p style="margin-top: 2rem; color: #999; font-size: 0.9rem;">💡 Tip: Click the 🎤 button next to the input field for voice!</p>
     </div>
     """, unsafe_allow_html=True)
 
 st.markdown("---")
-col1, col2, col3 = st.columns(3)
+col1, col2, col3, col4 = st.columns(4)
 with col1:
     st.metric("💬 Messages", len(st.session_state.messages))
 with col2:
     redis_status = "✅ Active" if memory.redis_available else "⚠️ Fallback"
     st.metric("Memory", redis_status)
 with col3:
+    db = next(get_db())
+    tm = TaskManager(db)
+    prog = tm.get_stage_progress(st.session_state.user_id, st.session_state.current_stage)
+    st.metric("✅ Tasks", f"{prog['completed']}/{prog['total']}")
+with col4:
     stage_progress = (current_stage_index + 1) / len(stages) * 100
-    st.metric("📊 Progress", f"{stage_progress:.0f}%")
+    st.metric("📊 Overall", f"{stage_progress:.0f}%")

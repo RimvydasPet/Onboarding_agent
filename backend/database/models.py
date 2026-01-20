@@ -78,6 +78,23 @@ class LongTermMemoryDB(Base):
     user = relationship("UserDB", back_populates="memories")
 
 
+class OnboardingTaskDB(Base):
+    __tablename__ = "onboarding_tasks"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    stage = Column(String, nullable=False)
+    task_id = Column(String, nullable=False)
+    description = Column(String, nullable=False)
+    completed = Column(Boolean, default=False)
+    optional = Column(Boolean, default=False)
+    completion_data = Column(JSON, default=dict)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    completed_at = Column(DateTime, nullable=True)
+    
+    user = relationship("UserDB")
+
+
 class DocumentDB(Base):
     __tablename__ = "documents"
     
