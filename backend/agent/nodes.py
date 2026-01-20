@@ -5,7 +5,6 @@ from backend.agent.state import OnboardingAgentState
 from backend.rag.agentic_rag import AgenticRAG
 from backend.memory.short_term import ShortTermMemory
 from backend.memory.long_term import LongTermMemory
-from backend.services.task_manager import TaskManager
 from backend.config import settings
 from backend.database.connection import get_db
 import logging
@@ -133,85 +132,31 @@ class AgentNodes:
     def _build_system_prompt(self, state: OnboardingAgentState) -> str:
         """Build system prompt for the agent."""
         stage = state.get("current_stage", "welcome")
-        user_id = state.get("user_id", 1)
         
-        # Get task information
-        db = next(get_db())
-        task_manager = TaskManager(db)
-        task_manager.initialize_stage_tasks(user_id, stage)
-        
-        progress = task_manager.get_stage_progress(user_id, stage)
-        next_task = task_manager.get_next_incomplete_task(user_id, stage)
-        
-        base_prompt = """You are a proactive onboarding assistant. Your PRIMARY goal is to guide users through specific tasks to complete their onboarding.
+        base_prompt = """You are a friendly and helpful onboarding assistant. Your goal is to help new users get started with our platform.
 
 Your responsibilities:
-- PROACTIVELY guide users through required tasks
-- ASK questions to collect necessary information
-- VALIDATE user responses before marking tasks complete
-- ENCOURAGE users and celebrate task completions
-- SUGGEST the next task after each completion
-- Be directive but friendly
+- Answer questions clearly and concisely
+- Guide users through the onboarding process
+- Provide relevant information from the documentation
+- Be encouraging and supportive
+- Suggest next steps when appropriate
 
 Communication style:
-- Start by asking questions, not just answering
-- Guide users step-by-step through tasks
-- Be specific about what you need from them
-- Acknowledge task completion explicitly
-- Always suggest the next action"""
+- Friendly and conversational
+- Clear and easy to understand
+- Patient and helpful
+- Use examples when helpful"""
 
         stage_prompts = {
-            "welcome": f"""\n\nCurrent Stage: WELCOME ({progress['required_completed']}/{progress['required_total']} required tasks complete)
-
-Your goal: Collect basic information and set expectations.
-Required tasks:
-- Get user's name
-- Understand their role
-- Explain what they'll accomplish
-
-Start by warmly greeting them and asking for their name.""",
-            "profile_setup": f"""\n\nCurrent Stage: PROFILE SETUP ({progress['required_completed']}/{progress['required_total']} required tasks complete)
-
-Your goal: Help complete their profile with all required information.
-Required tasks:
-- Full name
-- Email verification
-- Role selection
-
-Ask for each piece of information one at a time. Validate before moving on.""",
-            "learning_preferences": f"""\n\nCurrent Stage: LEARNING PREFERENCES ({progress['required_completed']}/{progress['required_total']} required tasks complete)
-
-Your goal: Understand how they prefer to learn.
-Required tasks:
-- Learning style (visual/hands-on/reading)
-- Notification preferences
-- Tutorial pace
-
-Present options clearly and ask them to choose.""",
-            "first_steps": f"""\n\nCurrent Stage: FIRST STEPS ({progress['required_completed']}/{progress['required_total']} required tasks complete)
-
-Your goal: Guide them through initial platform actions.
-Required tasks:
-- Explore dashboard
-- Create first project
-- Complete tutorial
-
-Provide clear instructions for each task. Ask them to confirm completion.""",
-            "completed": f"""\n\nCurrent Stage: COMPLETED
-
-Congratulate them on completing onboarding! Offer ongoing support and suggest next steps for continued learning."""
+            "welcome": "\n\nCurrent Stage: Welcome - Greet the user warmly and introduce the platform.",
+            "profile_setup": "\n\nCurrent Stage: Profile Setup - Help the user complete their profile.",
+            "learning_preferences": "\n\nCurrent Stage: Learning Preferences - Understand how the user likes to learn.",
+            "first_steps": "\n\nCurrent Stage: First Steps - Guide the user through their first actions.",
+            "completed": "\n\nCurrent Stage: Completed - Congratulate the user and offer ongoing support."
         }
         
-        prompt = base_prompt + stage_prompts.get(stage, "")
-        
-        # Add current task focus
-        if next_task:
-            task_type = "Optional" if next_task["optional"] else "Required"
-            prompt += f"\n\nCURRENT TASK ({task_type}): {next_task['description']}\nFocus on completing this task with the user."
-        elif progress['stage_complete']:
-            prompt += "\n\nAll required tasks complete! Congratulate the user and let them know they can move to the next stage."
-        
-        return prompt
+        return base_prompt + stage_prompts.get(stage, "")
     
     def _build_context_prompt(self, state: OnboardingAgentState) -> str:
         """Build context prompt with retrieved documents and memories."""

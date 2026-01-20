@@ -83,13 +83,6 @@ The AI Onboarding Assistant is a conversational AI agent designed to guide new u
 - User preference tracking
 - Personalized recommendations
 
-#### 5. **Voice Input (English)**
-- 🎤 Hands-free interaction via microphone
-- Speech-to-text using Google Speech Recognition
-- Real-time voice transcription
-- Automatic language detection for English
-- Fallback to text input if microphone unavailable
-
 ---
 
 ## 🏗️ Architecture
@@ -166,26 +159,7 @@ GOOGLE_API_KEY=your_google_api_key_here
 SECRET_KEY=your-secret-key-change-in-production
 ```
 
-### Step 4: Install Voice Input Dependencies (for 🎤 Voice Feature)
-
-**macOS:**
-```bash
-./install_voice_deps.sh
-```
-
-**Linux:**
-```bash
-./install_voice_deps.sh
-```
-
-**Windows:**
-```bash
-pip install SpeechRecognition pydub pyaudio
-```
-
-**Note:** Voice input requires microphone access. Grant permissions when prompted.
-
-### Step 5: (Optional) Install Redis
+### Step 4: (Optional) Install Redis
 
 **macOS:**
 ```bash
@@ -218,24 +192,9 @@ Open your browser to `http://localhost:8501`
 
 The interface will show:
 - 💬 Interactive chat with the AI assistant
-- � Voice input button for hands-free interaction (English)
-- �🎯 Progress tracking through 5 onboarding stages
+- 🎯 Progress tracking through 5 onboarding stages
 - 📊 Session statistics and metrics
 - 🎨 Beautiful purple gradient UI
-
-### Using Voice Input
-
-1. Click the **🎤 Voice Input (English)** button
-2. Allow microphone access when prompted
-3. Speak your question clearly in English
-4. Wait for transcription to appear
-5. The assistant will respond to your voice input
-
-**Tips for best results:**
-- Speak clearly and at a normal pace
-- Minimize background noise
-- Wait for the "Listening..." indicator
-- Questions are automatically submitted after transcription
 
 ### Try These Questions
 
