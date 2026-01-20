@@ -17,9 +17,38 @@ from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
 import io
 import json
+import random
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+INSPIRATIONAL_QUOTES = [
+    ("The journey of a thousand miles begins with a single step.", "Lao Tzu"),
+    ("Success is not final, failure is not fatal: it is the courage to continue that counts.", "Winston Churchill"),
+    ("Believe you can and you're halfway there.", "Theodore Roosevelt"),
+    ("The only way to do great work is to love what you do.", "Steve Jobs"),
+    ("Your limitation—it's only your imagination.", "Unknown"),
+    ("Great things never come from comfort zones.", "Unknown"),
+    ("Dream it. Wish it. Do it.", "Unknown"),
+    ("Success doesn't just find you. You have to go out and get it.", "Unknown"),
+    ("The harder you work for something, the greater you'll feel when you achieve it.", "Unknown"),
+    ("Don't stop when you're tired. Stop when you're done.", "Unknown"),
+    ("Wake up with determination. Go to bed with satisfaction.", "Unknown"),
+    ("Do something today that your future self will thank you for.", "Unknown"),
+    ("Little things make big days.", "Unknown"),
+    ("It's going to be hard, but hard does not mean impossible.", "Unknown"),
+    ("Don't wait for opportunity. Create it.", "Unknown"),
+    ("The secret of getting ahead is getting started.", "Mark Twain"),
+    ("Everything you've ever wanted is on the other side of fear.", "George Addair"),
+    ("The best time to plant a tree was 20 years ago. The second best time is now.", "Chinese Proverb"),
+    ("Your future is created by what you do today, not tomorrow.", "Robert Kiyosaki"),
+    ("Start where you are. Use what you have. Do what you can.", "Arthur Ashe")
+]
+
+def get_random_quote():
+    """Get a random inspirational quote."""
+    quote, author = random.choice(INSPIRATIONAL_QUOTES)
+    return quote, author
 
 st.set_page_config(
     page_title="Onboarding Assistant",
@@ -106,6 +135,15 @@ def get_llm():
         temperature=0.7
     )
 
+def summarize_text(text, max_words=15):
+    """Summarize text to key points."""
+    if not text:
+        return "Not provided"
+    words = text.split()
+    if len(words) <= max_words:
+        return text
+    return ' '.join(words[:max_words]) + "..."
+
 def generate_pdf(user_data):
     """Generate PDF with onboarding information."""
     buffer = io.BytesIO()
@@ -131,7 +169,7 @@ def generate_pdf(user_data):
     
     story = []
     
-    story.append(Paragraph("🎉 Onboarding Summary", title_style))
+    story.append(Paragraph("Onboarding Summary", title_style))
     story.append(Spacer(1, 0.3*inch))
     
     story.append(Paragraph(f"Generated: {datetime.now().strftime('%B %d, %Y at %I:%M %p')}", styles['Normal']))
@@ -139,11 +177,15 @@ def generate_pdf(user_data):
     
     story.append(Paragraph("Personal Information", heading_style))
     
+    name = user_data.get('name', 'Not provided')
+    role = summarize_text(user_data.get('role', ''), 10)
+    goals = summarize_text(user_data.get('goals', ''), 15)
+    
     data = [
         ['Field', 'Information'],
-        ['Name', user_data.get('name', 'Not provided')],
-        ['Role/Position', user_data.get('role', 'Not provided')],
-        ['Goals', user_data.get('goals', 'Not provided')],
+        ['Name', name],
+        ['Role/Position', role],
+        ['Goals', goals],
     ]
     
     table = Table(data, colWidths=[2*inch, 4*inch])
@@ -300,7 +342,6 @@ if st.sidebar.button("🔄 New Session"):
     st.rerun()
 
 st.markdown('<div class="main-header">🤖 Onboarding Assistant</div>', unsafe_allow_html=True)
-st.markdown(f'<p style="text-align: center;"><span class="stage-badge">{next(s[1] for s in stages if s[0] == st.session_state.current_stage)}</span></p>', unsafe_allow_html=True)
 
 st.markdown("---")
 
@@ -313,41 +354,24 @@ for message in st.session_state.messages:
     else:
         st.markdown(f'<div class="chat-message assistant-message"><strong>🤖 Assistant:</strong><br>{content}</div>', unsafe_allow_html=True)
 
-if len(st.session_state.messages) == 0 and not st.session_state.conversation_started:
-    welcome_message = """
+if len(st.session_state.messages) == 0:
+    quote, author = get_random_quote()
+    welcome_message = f"""
     <div style="text-align: center; padding: 2rem;">
-        <h2>👋 Welcome to Your Onboarding Journey!</h2>
-        <p style="font-size: 1.1rem; margin: 1.5rem 0;">
-            I'm your personal onboarding assistant, here to help you get started with our platform.
+        <h2>👋 Welcome to TechVenture Solutions!</h2>
+        <p style="font-size: 1.2rem; font-style: italic; color: #667eea; margin: 1.5rem 0;">
+            "{quote}" - {author}
         </p>
-        <p style="font-size: 1rem; color: #666;">
-            To complete this stage, I'll need to collect some basic information from you:
+        <p style="font-size: 1rem; color: #666; margin: 1.5rem 0;">
+            At TechVenture Solutions, we're committed to making your onboarding experience smooth and engaging.
+        </p>
+        <p style="font-size: 1rem; color: #667eea; font-weight: bold; margin-top: 1.5rem;">
+            📖 Please read this welcome message, then type your name below or introduce yourself to begin your journey with us!
         </p>
     </div>
     """
     st.markdown(welcome_message, unsafe_allow_html=True)
     
-    st.markdown("""
-    <div class="checklist-container">
-        <div class="checklist-title">✅ Current Stage Tasks</div>
-        <div class="checklist-item">⬜ Read welcome message</div>
-        <div class="checklist-item">⬜ Provide your name</div>
-        <div class="checklist-item">⬜ Share your role/position</div>
-        <div class="checklist-item">⬜ Discuss your goals (optional)</div>
-        <div class="progress-text">📊 0/3 required tasks done</div>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    st.markdown("""
-    <div style="text-align: center; padding: 1rem; background: #f0f7ff; border-radius: 10px; margin: 1rem 0;">
-        <p style="margin: 0; color: #667eea; font-weight: bold;">
-            💡 Type anything in the chat below to get started!
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    st.session_state.conversation_started = True
-
 user_input = st.chat_input("Type your message here...")
 
 if user_input:
@@ -426,33 +450,55 @@ Current Progress: {completed_count}/3 required tasks completed"""
             user_input_lower = user_input.lower()
             response_lower = response_content.lower()
             
+            name_just_provided = False
+            
             if not st.session_state.checklist["name_provided"]:
-                if any(word in user_input_lower for word in ["my name is", "i'm", "i am", "call me", "name's", "this is"]):
+                name_triggers = ["my name is", "i'm", "i am", "call me", "name's", "this is", "hey", "hi", "hello"]
+                
+                if any(trigger in user_input_lower for trigger in name_triggers):
                     name_parts = user_input.split()
                     for i, word in enumerate(name_parts):
                         if word.lower() in ["is", "i'm", "am", "me", "name's"] and i + 1 < len(name_parts):
                             potential_name = name_parts[i + 1].strip('.,!?')
-                            if potential_name and len(potential_name) > 1 and potential_name[0].isupper():
+                            if potential_name and len(potential_name) > 1:
                                 st.session_state.user_data["name"] = potential_name.capitalize()
                                 st.session_state.checklist["name_provided"] = True
+                                name_just_provided = True
                                 break
+                
+                if not st.session_state.checklist["name_provided"]:
+                    clean_input = user_input.strip().strip('.,!?')
+                    words = clean_input.split()
+                    if len(words) <= 3 and len(clean_input) >= 2:
+                        st.session_state.user_data["name"] = clean_input.title()
+                        st.session_state.checklist["name_provided"] = True
+                        name_just_provided = True
             
-            if not st.session_state.checklist["role_provided"]:
-                role_indicators = [
-                    "role", "position", "job", "work as", "working as", "i'm a", "i am a",
+            if not st.session_state.checklist["role_provided"] and st.session_state.checklist["name_provided"] and not name_just_provided:
+                role_keywords = [
                     "developer", "engineer", "manager", "designer", "analyst", "student", 
                     "teacher", "consultant", "director", "lead", "senior", "junior", "intern",
-                    "specialist", "coordinator", "assistant", "administrator", "officer",
-                    "architect", "scientist", "researcher", "professor", "instructor"
+                    "specialist", "coordinator", "administrator", "officer",
+                    "architect", "scientist", "researcher", "professor", "instructor",
+                    "accountant", "lawyer", "doctor", "nurse", "sales", "marketing",
+                    "hr", "human resources", "ceo", "cto", "cfo", "founder", "owner",
+                    "programmer", "writer", "editor", "artist", "musician", "chef",
+                    "driver", "pilot", "mechanic", "electrician", "plumber", "carpenter",
+                    "technician", "support", "customer", "service", "agent", "representative"
                 ]
                 
-                if any(indicator in user_input_lower for indicator in role_indicators):
+                role_phrases = ["work as", "working as", "i'm a", "i am a", "my role", "my position", "my job",
+                               "i work", "i do", "profession", "occupation", "career"]
+                
+                has_role_keyword = any(keyword in user_input_lower for keyword in role_keywords)
+                has_role_phrase = any(phrase in user_input_lower for phrase in role_phrases)
+                
+                if has_role_keyword or has_role_phrase:
                     st.session_state.user_data["role"] = user_input
                     st.session_state.checklist["role_provided"] = True
-                elif "role" in response_lower or "position" in response_lower:
-                    if len(user_input.split()) >= 2:
-                        st.session_state.user_data["role"] = user_input
-                        st.session_state.checklist["role_provided"] = True
+                elif len(user_input.split()) >= 1 and len(user_input) >= 3:
+                    st.session_state.user_data["role"] = user_input
+                    st.session_state.checklist["role_provided"] = True
             
             if not st.session_state.checklist["goals_discussed"]:
                 goal_keywords = ["goal", "want to", "hoping to", "plan to", "learn", "improve", "achieve", 

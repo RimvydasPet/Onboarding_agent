@@ -196,7 +196,7 @@ if len(st.session_state.messages) == 0:
     st.markdown("""
     <div style="text-align: center; padding: 3rem; color: #666;">
         <h3>👋 Welcome! I'm your onboarding assistant.</h3>
-        <p>I'm here to help you get started with our platform.</p>
+        <p>I'm here to help you get started with our onboarding process.</p>
         <p>Try asking me:</p>
         <ul style="list-style: none; padding: 0;">
             <li>• "How do I create a new project?"</li>
