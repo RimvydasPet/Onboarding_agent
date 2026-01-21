@@ -167,7 +167,7 @@ Key goals:"""
         logger.warning(f"Failed to summarize goals with LLM: {e}")
         return summarize_text(goals_text, 20)
 
-def generate_pdf(user_data, role_type=None, it_profile=None, sales_profile=None, current_stage="welcome"):
+def generate_pdf(user_data, role_type=None, it_profile=None, sales_profile=None, learning_preferences=None, current_stage="welcome"):
     """Generate PDF with onboarding information."""
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter, topMargin=0.5*inch, bottomMargin=0.5*inch)
@@ -318,6 +318,45 @@ def generate_pdf(user_data, role_type=None, it_profile=None, sales_profile=None,
                 story.append(sales_table)
                 story.append(Spacer(1, 0.3*inch))
     
+    # Add Learning Preferences section
+    if current_stage == "learning_preferences" or (learning_preferences and any(learning_preferences.values())):
+        story.append(Paragraph("Learning Preferences", heading_style))
+        
+        learning_data = [['Field', 'Information']]
+        if learning_preferences:
+            if learning_preferences.get('learning_style'):
+                learning_data.append(['Learning Style', summarize_text(learning_preferences['learning_style'], 20)])
+            if learning_preferences.get('preferred_format'):
+                learning_data.append(['Preferred Format', summarize_text(learning_preferences['preferred_format'], 15)])
+            if learning_preferences.get('time_commitment'):
+                learning_data.append(['Time Commitment', summarize_text(learning_preferences['time_commitment'], 15)])
+            if learning_preferences.get('specific_goals'):
+                learning_data.append(['Skills to Develop', summarize_text(learning_preferences['specific_goals'], 25)])
+            if learning_preferences.get('support_needed'):
+                learning_data.append(['Support Needed', summarize_text(learning_preferences['support_needed'], 20)])
+            if learning_preferences.get('timeline'):
+                learning_data.append(['Timeline', summarize_text(learning_preferences['timeline'], 15)])
+        
+        if len(learning_data) > 1:
+            learning_table = Table(learning_data, colWidths=[2*inch, 4*inch])
+            learning_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#667eea')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 12),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black),
+                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                ('LEFTPADDING', (0, 0), (-1, -1), 10),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 10),
+                ('TOPPADDING', (0, 0), (-1, -1), 8),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+            ]))
+            story.append(learning_table)
+            story.append(Spacer(1, 0.3*inch))
+    
     story.append(Paragraph("Key Points", heading_style))
     
     key_points = [
@@ -335,6 +374,18 @@ def generate_pdf(user_data, role_type=None, it_profile=None, sales_profile=None,
             key_points.append("✓ IT-specific configuration started")
         elif role_type == "Sales":
             key_points.append("✓ Sales-specific setup started")
+    
+    if current_stage == "learning_preferences" or (learning_preferences and any(learning_preferences.values())):
+        key_points.append("✓ Learning preferences discussed")
+        if learning_preferences:
+            if learning_preferences.get('learning_style'):
+                key_points.append("✓ Learning style identified")
+            if learning_preferences.get('specific_goals'):
+                key_points.append("✓ Skills to develop documented")
+            if learning_preferences.get('time_commitment'):
+                key_points.append("✓ Time commitment established")
+            if learning_preferences.get('support_needed'):
+                key_points.append("✓ Support resources identified")
     
     for point in key_points:
         story.append(Paragraph(f"• {point}", styles['Normal']))
@@ -428,6 +479,25 @@ if "sales_profile" not in st.session_state:
 if "profile_setup_checklist" not in st.session_state:
     st.session_state.profile_setup_checklist = {
         "profile_started": False,
+        "field_1": False,
+        "field_2": False,
+        "field_3": False,
+        "field_4": False
+    }
+
+if "learning_preferences" not in st.session_state:
+    st.session_state.learning_preferences = {
+        "learning_style": "",
+        "preferred_format": "",
+        "time_commitment": "",
+        "specific_goals": "",
+        "support_needed": "",
+        "timeline": ""
+    }
+
+if "learning_checklist" not in st.session_state:
+    st.session_state.learning_checklist = {
+        "learning_started": False,
         "field_1": False,
         "field_2": False,
         "field_3": False,
@@ -544,6 +614,43 @@ stages = [
     ("completed", "Completed", "✅")
 ]
 
+st.sidebar.markdown("---")
+st.sidebar.markdown("### 🧪 Testing Mode")
+st.sidebar.markdown("Jump to any stage for testing:")
+
+stage_options = {f"{emoji} {name}": stage_id for stage_id, name, emoji in stages}
+selected_stage = st.sidebar.selectbox(
+    "Select Stage",
+    options=list(stage_options.keys()),
+    index=next((i for i, (stage_id, _, _) in enumerate(stages) if stage_id == st.session_state.current_stage), 0),
+    key="stage_selector"
+)
+
+if st.sidebar.button("🚀 Jump to Stage", use_container_width=True):
+    new_stage = stage_options[selected_stage]
+    if new_stage != st.session_state.current_stage:
+        st.session_state.session_id = str(uuid.uuid4())
+        st.session_state.current_stage = new_stage
+        st.session_state.messages = []
+        
+        if new_stage == "profile_setup" and not st.session_state.user_data.get('name'):
+            st.session_state.user_data['name'] = "Test User"
+            st.session_state.user_data['role'] = "Test Role"
+            st.session_state.checklist['name_provided'] = True
+            st.session_state.checklist['role_provided'] = True
+        
+        if new_stage == "learning_preferences":
+            if not st.session_state.user_data.get('name'):
+                st.session_state.user_data['name'] = "Test User"
+                st.session_state.user_data['role'] = "Test Role"
+            if not st.session_state.role_type:
+                st.session_state.role_type = "IT"
+        
+        st.sidebar.success(f"Jumped to {selected_stage}!")
+        st.rerun()
+
+st.sidebar.markdown("---")
+
 current_stage_index = next((i for i, s in enumerate(stages) if s[0] == st.session_state.current_stage), 0)
 
 for i, (stage_id, stage_name, emoji) in enumerate(stages):
@@ -617,9 +724,53 @@ elif st.session_state.current_stage == "profile_setup":
     
     st.sidebar.markdown(f"**📊 {completed_count}/{len(checklist_items)} tasks done**")
 
+elif st.session_state.current_stage == "learning_preferences":
+    st.sidebar.markdown("### ✅ Learning Preferences")
+    
+    role_type = st.session_state.role_type or "Other"
+    
+    if role_type == "IT":
+        checklist_items = [
+            ("learning_started", "Start learning preferences"),
+            ("field_1", "Learning style & format"),
+            ("field_2", "Technical skills to develop"),
+            ("field_3", "Time commitment & pace"),
+            ("field_4", "Support & resources needed")
+        ]
+    elif role_type == "Sales":
+        checklist_items = [
+            ("learning_started", "Start learning preferences"),
+            ("field_1", "Learning style & format"),
+            ("field_2", "Product & sales training"),
+            ("field_3", "Time commitment & pace"),
+            ("field_4", "Support & resources needed")
+        ]
+    else:
+        checklist_items = [
+            ("learning_started", "Start learning preferences"),
+            ("field_1", "Learning style & format"),
+            ("field_2", "Skills to develop"),
+            ("field_3", "Time commitment & pace"),
+            ("field_4", "Support & resources needed")
+        ]
+    
+    completed_count = sum(1 for key, _ in checklist_items if st.session_state.learning_checklist[key])
+    
+    for key, label in checklist_items:
+        if st.session_state.learning_checklist[key]:
+            st.sidebar.markdown(f"✅ ~~{label}~~")
+        else:
+            st.sidebar.markdown(f"⬜ {label}")
+    
+    st.sidebar.markdown(f"**📊 {completed_count}/{len(checklist_items)} tasks done**")
+
 st.sidebar.markdown("---")
-st.sidebar.markdown(f"**Session:** `{st.session_state.session_id[:8]}...`")
-st.sidebar.markdown(f"**Messages:** {len(st.session_state.messages)}")
+
+with st.sidebar.expander("🔧 Developer Info"):
+    st.markdown(f"**Session ID:** `{st.session_state.session_id[:8]}...`")
+    st.markdown(f"**Messages:** {len(st.session_state.messages)}")
+    st.markdown(f"**Current Stage:** `{st.session_state.current_stage}`")
+    st.markdown(f"**Role Type:** `{st.session_state.role_type or 'Not set'}`")
 
 if st.sidebar.button("🔄 New Session"):
     st.session_state.session_id = str(uuid.uuid4())
@@ -666,6 +817,21 @@ if st.sidebar.button("🔄 New Session"):
         "field_3": False,
         "field_4": False
     }
+    st.session_state.learning_preferences = {
+        "learning_style": "",
+        "preferred_format": "",
+        "time_commitment": "",
+        "specific_goals": "",
+        "support_needed": "",
+        "timeline": ""
+    }
+    st.session_state.learning_checklist = {
+        "learning_started": False,
+        "field_1": False,
+        "field_2": False,
+        "field_3": False,
+        "field_4": False
+    }
     st.session_state.conversation_started = False
     st.rerun()
 
@@ -673,14 +839,18 @@ st.markdown('<div class="main-header">🤖 Onboarding Assistant</div>', unsafe_a
 
 st.markdown("---")
 
+import html
+
 for message in st.session_state.messages:
     role = message["role"]
     content = message["content"]
     
     if role == "user":
-        st.markdown(f'<div class="chat-message user-message"><strong>You:</strong><br>{content}</div>', unsafe_allow_html=True)
+        escaped_content = html.escape(content)
+        st.markdown(f'<div class="chat-message user-message"><strong>You:</strong><br>{escaped_content}</div>', unsafe_allow_html=True)
     else:
-        st.markdown(f'<div class="chat-message assistant-message"><strong>🤖 Assistant:</strong><br>{content}</div>', unsafe_allow_html=True)
+        escaped_content = content.replace('\n', '<br>')
+        st.markdown(f'<div class="chat-message assistant-message"><strong>🤖 Assistant:</strong><br>{escaped_content}</div>', unsafe_allow_html=True)
 
 if len(st.session_state.messages) == 0:
     if st.session_state.current_stage == "welcome":
@@ -733,6 +903,63 @@ if len(st.session_state.messages) == 0:
         </div>
         """
         st.markdown(profile_message, unsafe_allow_html=True)
+    
+    elif st.session_state.current_stage == "learning_preferences":
+        role_type = st.session_state.role_type or "Other"
+        user_name = st.session_state.user_data.get('name', 'there')
+        
+        if role_type == "IT":
+            icon = "📚"
+            title = "Learning Preferences - Technical Development"
+            why_important = "Understanding how you learn best helps us create a personalized training path that accelerates your technical growth and ensures you master the tools and technologies efficiently."
+            what_to_know = [
+                "Your preferred learning style (hands-on, documentation, video tutorials, mentoring)",
+                "Technical skills you want to develop and your current proficiency",
+                "Time you can dedicate to learning and your preferred pace",
+                "Support resources you'll need (mentors, courses, documentation)"
+            ]
+        elif role_type == "Sales":
+            icon = "📚"
+            title = "Learning Preferences - Sales Development"
+            why_important = "Knowing your learning preferences allows us to design a ramp-up plan that gets you selling effectively faster, while building confidence in our products and sales methodology."
+            what_to_know = [
+                "Your preferred learning approach (role-play, shadowing, self-study, coaching)",
+                "Product knowledge and sales skills you need to develop",
+                "Time you can commit to training and your target timeline",
+                "Support you'll need (sales mentors, training resources, practice opportunities)"
+            ]
+        else:
+            icon = "📚"
+            title = "Learning Preferences"
+            why_important = "Understanding your learning preferences helps us tailor your onboarding experience, ensuring you acquire the knowledge and skills you need in a way that works best for you."
+            what_to_know = [
+                "Your preferred learning style and format (visual, hands-on, reading, discussion)",
+                "Skills and knowledge areas you want to develop",
+                "Time you can dedicate to learning and your preferred pace",
+                "Support and resources you'll need to succeed"
+            ]
+        
+        what_to_know_formatted = "<br>".join([f"• {item}" for item in what_to_know])
+        
+        learning_message = f"""
+<div style="text-align: center; padding: 2rem;">
+<h2>{icon} {title}</h2>
+<p style="font-size: 1.2rem; color: #667eea; margin: 1.5rem 0;">
+Welcome, {user_name}!
+</p>
+<p style="font-size: 1rem; color: #666; margin: 1.5rem 0;">
+🎯 <strong>Why This Stage Matters:</strong> {why_important}
+</p>
+<p style="font-size: 1rem; color: #666; margin: 1.5rem 0; text-align: left; max-width: 600px; margin-left: auto; margin-right: auto;">
+📋 <strong>What We Need to Know About You:</strong><br>
+{what_to_know_formatted}
+</p>
+<p style="font-size: 1rem; color: #667eea; font-weight: bold; margin-top: 1.5rem;">
+💬 Let's create a learning plan that works perfectly for you. Ready to start?
+</p>
+</div>
+"""
+        st.markdown(learning_message, unsafe_allow_html=True)
     
 user_input = st.chat_input("Type your message here...")
 
@@ -936,6 +1163,138 @@ Remember: Be helpful but MOVE EFFICIENTLY through all 4 areas. Don't spend too l
 
 CRITICAL: You MUST ensure ALL 4 areas are covered before the profile setup is complete. Check the profile status and guide the conversation to cover any missing areas.
 """
+            
+            elif st.session_state.current_stage == "learning_preferences":
+                if not st.session_state.learning_checklist["learning_started"]:
+                    st.session_state.learning_checklist["learning_started"] = True
+                
+                role_type = st.session_state.role_type or "Other"
+                
+                learning_status = "\n".join([
+                    f"- Learning Style: {st.session_state.learning_preferences['learning_style'] or 'Not provided'}",
+                    f"- Preferred Format: {st.session_state.learning_preferences['preferred_format'] or 'Not provided'}",
+                    f"- Time Commitment: {st.session_state.learning_preferences['time_commitment'] or 'Not provided'}",
+                    f"- Specific Goals: {st.session_state.learning_preferences['specific_goals'] or 'Not provided'}",
+                    f"- Support Needed: {st.session_state.learning_preferences['support_needed'] or 'Not provided'}",
+                    f"- Timeline: {st.session_state.learning_preferences['timeline'] or 'Not provided'}"
+                ])
+                
+                if role_type == "IT":
+                    system_prompt = f"""You are a helpful learning advisor for a new technical team member.
+
+Current Stage: Learning Preferences (Time-Limited Meeting)
+
+User Information:
+- Name: {st.session_state.user_data['name']}
+- Role: {st.session_state.user_data['role']}
+
+CRITICAL: Our meeting time is limited. You MUST efficiently cover these 4 key areas:
+1. ✅ Learning style & format - How they learn best (visual, hands-on, reading, videos, etc.)
+2. ✅ Technical skills to develop - Languages, frameworks, tools, certifications they want to learn
+3. ✅ Time commitment & pace - Hours per week, intensive vs gradual, best time for learning
+4. ✅ Support & resources needed - Mentorship, courses, budget, learning platforms
+
+Current Learning Status:
+{learning_status}
+
+IMPORTANT INSTRUCTIONS:
+- Be FOCUSED and EFFICIENT - we have limited time to cover all topics
+- GUIDE them through creating a personalized learning plan
+- Offer specific examples and suggestions (Udemy, Pluralsight, AWS certifications, etc.)
+- If they're unsure, PROVIDE typical learning paths for their role
+- Move through topics systematically to ensure all areas are covered
+- Keep responses concise and actionable (2-3 sentences max)
+- Proactively suggest learning resources and timelines
+- Use their name: {st.session_state.user_data['name']}
+
+Example approach:
+- "How do you learn best - through hands-on coding, video tutorials, documentation, or a mix? Most developers prefer hands-on practice with some video guidance."
+- "What technical skills would you like to develop? For a {st.session_state.user_data['role']}, popular areas are cloud platforms (AWS/Azure), new frameworks, or system design."
+- "How much time can you dedicate to learning each week - 2-3 hours, 5-10 hours, or more? Let's create a realistic schedule."
+- "Would you benefit from a mentor, online courses, or both? We can set you up with learning resources and pair you with an experienced team member."
+
+Remember: Be helpful but MOVE EFFICIENTLY through all 4 areas. Create an actionable learning plan.
+
+CRITICAL: You MUST ensure ALL 4 areas are covered before learning preferences are complete. Check the status and guide the conversation to cover any missing areas.
+"""
+                
+                elif role_type == "Sales":
+                    system_prompt = f"""You are a helpful learning advisor for a new sales team member.
+
+Current Stage: Learning Preferences (Time-Limited Meeting)
+
+User Information:
+- Name: {st.session_state.user_data['name']}
+- Role: {st.session_state.user_data['role']}
+
+CRITICAL: Our meeting time is limited. You MUST efficiently cover these 4 key areas:
+1. ✅ Learning style & format - How they learn best (role-play, shadowing, reading, videos, etc.)
+2. ✅ Product & sales training - Product knowledge, sales methodology, industry expertise needed
+3. ✅ Time commitment & pace - Hours per week, ramp-up timeline, best time for training
+4. ✅ Support & resources needed - Mentorship, sales enablement, training programs, certifications
+
+Current Learning Status:
+{learning_status}
+
+IMPORTANT INSTRUCTIONS:
+- Be FOCUSED and EFFICIENT - we have limited time to cover all topics
+- GUIDE them through creating a personalized sales ramp-up plan
+- Offer specific examples (sales methodology training, product demos, shadowing top reps)
+- If they're unsure, PROVIDE typical ramp-up paths for their sales role
+- Move through topics systematically to ensure all areas are covered
+- Keep responses energetic and actionable (2-3 sentences max)
+- Proactively suggest training resources and timelines
+- Use their name: {st.session_state.user_data['name']}
+
+Example approach:
+- "How do you learn best - through shadowing experienced reps, role-playing, product demos, or reading materials? Most sales reps benefit from a mix of shadowing and hands-on practice."
+- "What do you need to learn first - product knowledge, our sales process, or industry expertise? Let's prioritize your ramp-up."
+- "How much time can you dedicate to training each week before you start taking calls? Typical ramp-up is 2-4 weeks of intensive training."
+- "Would you like to shadow a top performer, have a mentor, or both? We can pair you with someone who matches your learning style."
+
+Remember: Be helpful but MOVE EFFICIENTLY through all 4 areas. Create an actionable ramp-up plan.
+
+CRITICAL: You MUST ensure ALL 4 areas are covered before learning preferences are complete. Check the status and guide the conversation to cover any missing areas.
+"""
+                
+                else:
+                    system_prompt = f"""You are a helpful learning advisor for a new team member.
+
+Current Stage: Learning Preferences (Time-Limited Meeting)
+
+User Information:
+- Name: {st.session_state.user_data['name']}
+- Role: {st.session_state.user_data['role']}
+
+CRITICAL: Our meeting time is limited. You MUST efficiently cover these 4 key areas:
+1. ✅ Learning style & format - How they learn best (visual, hands-on, reading, videos, etc.)
+2. ✅ Skills to develop - Role-specific competencies and knowledge areas
+3. ✅ Time commitment & pace - Hours per week, learning timeline, best time for training
+4. ✅ Support & resources needed - Mentorship, training programs, learning resources
+
+Current Learning Status:
+{learning_status}
+
+IMPORTANT INSTRUCTIONS:
+- Be FOCUSED and EFFICIENT - we have limited time to cover all topics
+- GUIDE them through creating a personalized learning plan
+- Offer specific examples relevant to their role
+- If they're unsure, PROVIDE typical learning paths for similar roles
+- Move through topics systematically to ensure all areas are covered
+- Keep responses warm and actionable (2-3 sentences max)
+- Proactively suggest learning resources and timelines
+- Use their name: {st.session_state.user_data['name']}
+
+Example approach:
+- "How do you learn best - through hands-on practice, videos, reading, or a combination? Understanding your style helps us provide the right resources."
+- "What skills or knowledge areas would you like to develop for your role as a {st.session_state.user_data['role']}? Let's identify your priorities."
+- "How much time can you dedicate to learning each week? Let's create a realistic schedule that works for you."
+- "What support would help you most - a mentor, training courses, or learning resources? We can set you up with what you need."
+
+Remember: Be helpful but MOVE EFFICIENTLY through all 4 areas. Create an actionable learning plan.
+
+CRITICAL: You MUST ensure ALL 4 areas are covered before learning preferences are complete. Check the status and guide the conversation to cover any missing areas.
+"""
 
             recent_messages = memory.get_messages(st.session_state.session_id, limit=10)
             
@@ -953,6 +1312,11 @@ CRITICAL: You MUST ensure ALL 4 areas are covered before the profile setup is co
             
             response = llm.invoke(messages)
             response_content = response.content
+            
+            import re
+            if '<div' in response_content or '<p' in response_content or '<h' in response_content:
+                response_content = re.sub(r'<[^>]+>', '', response_content)
+                response_content = response_content.strip()
             
             user_input_lower = user_input.lower()
             response_lower = response_content.lower()
@@ -1104,6 +1468,45 @@ CRITICAL: You MUST ensure ALL 4 areas are covered before the profile setup is co
                     if not st.session_state.sales_profile["experience_years"] and any(word in user_input_lower for word in ["year", "experience", "junior", "senior", "mid-level"]):
                         st.session_state.sales_profile["experience_years"] = user_input
             
+            # Learning Preferences stage data extraction
+            if st.session_state.current_stage == "learning_preferences":
+                # Field 1: Learning style & format
+                if not st.session_state.learning_preferences["learning_style"]:
+                    style_keywords = ["hands-on", "visual", "reading", "video", "tutorial", "documentation", 
+                                     "mentoring", "shadowing", "practice", "learn by doing", "watching",
+                                     "interactive", "self-paced", "instructor", "classroom", "online"]
+                    if any(word in user_input_lower for word in style_keywords):
+                        st.session_state.learning_preferences["learning_style"] = user_input
+                        st.session_state.learning_checklist["field_1"] = True
+                
+                # Field 2: Skills to develop / Specific goals
+                if not st.session_state.learning_preferences["specific_goals"]:
+                    skill_keywords = ["python", "java", "javascript", "react", "aws", "cloud", "docker", 
+                                     "kubernetes", "sql", "data", "machine learning", "ai", "api",
+                                     "framework", "language", "certification", "skill", "learn", "develop",
+                                     "product", "sales", "methodology", "communication", "leadership"]
+                    if any(word in user_input_lower for word in skill_keywords):
+                        st.session_state.learning_preferences["specific_goals"] = user_input
+                        st.session_state.learning_checklist["field_2"] = True
+                
+                # Field 3: Time commitment & pace
+                if not st.session_state.learning_preferences["time_commitment"]:
+                    time_keywords = ["hour", "week", "day", "month", "time", "schedule", "pace", 
+                                    "intensive", "gradual", "morning", "evening", "weekend",
+                                    "2-3", "5-10", "full-time", "part-time", "dedicate"]
+                    if any(word in user_input_lower for word in time_keywords):
+                        st.session_state.learning_preferences["time_commitment"] = user_input
+                        st.session_state.learning_checklist["field_3"] = True
+                
+                # Field 4: Support & resources needed
+                if not st.session_state.learning_preferences["support_needed"]:
+                    support_keywords = ["mentor", "course", "udemy", "pluralsight", "coursera", "training",
+                                       "resource", "budget", "platform", "help", "support", "guide",
+                                       "pair", "buddy", "coach", "workshop", "book", "documentation"]
+                    if any(word in user_input_lower for word in support_keywords):
+                        st.session_state.learning_preferences["support_needed"] = user_input
+                        st.session_state.learning_checklist["field_4"] = True
+            
             st.session_state.messages.append({
                 "role": "assistant",
                 "content": response_content,
@@ -1116,6 +1519,8 @@ CRITICAL: You MUST ensure ALL 4 areas are covered before the profile setup is co
                 "checklist": st.session_state.checklist,
                 "user_data": st.session_state.user_data,
                 "profile_setup_checklist": st.session_state.profile_setup_checklist,
+                "learning_checklist": st.session_state.learning_checklist,
+                "learning_preferences": st.session_state.learning_preferences,
                 "role_type": st.session_state.role_type,
                 "it_profile": st.session_state.it_profile,
                 "sales_profile": st.session_state.sales_profile
@@ -1182,6 +1587,7 @@ if completed_required >= 3 and st.session_state.current_stage == "welcome":
             role_type=st.session_state.role_type,
             it_profile=st.session_state.it_profile,
             sales_profile=st.session_state.sales_profile,
+            learning_preferences=st.session_state.learning_preferences,
             current_stage=st.session_state.current_stage
         )
         st.download_button(
@@ -1229,6 +1635,7 @@ elif st.session_state.current_stage == "profile_setup":
                 role_type=st.session_state.role_type,
                 it_profile=st.session_state.it_profile,
                 sales_profile=st.session_state.sales_profile,
+                learning_preferences=st.session_state.learning_preferences,
                 current_stage=st.session_state.current_stage
             )
             st.download_button(
@@ -1243,7 +1650,41 @@ elif st.session_state.current_stage == "profile_setup":
         with col2:
             if st.button("➡️ Continue to Learning Preferences", use_container_width=True):
                 st.session_state.current_stage = "learning_preferences"
+                st.session_state.messages = []
                 st.success("Moving to Learning Preferences stage!")
+                st.rerun()
+
+elif st.session_state.current_stage == "learning_preferences":
+    learning_completed = sum(1 for key in st.session_state.learning_checklist.values() if key)
+    
+    if learning_completed >= 4:
+        st.success("🎉 Great! You've completed all 4 learning preference areas!")
+        
+        col1, col2 = st.columns([1, 1])
+        
+        with col1:
+            pdf_buffer = generate_pdf(
+                st.session_state.user_data,
+                role_type=st.session_state.role_type,
+                it_profile=st.session_state.it_profile,
+                sales_profile=st.session_state.sales_profile,
+                learning_preferences=st.session_state.learning_preferences,
+                current_stage=st.session_state.current_stage
+            )
+            st.download_button(
+                label="📄 Download Learning Plan Summary",
+                data=pdf_buffer,
+                file_name=f"learning_plan_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
+                mime="application/pdf",
+                type="primary",
+                use_container_width=True
+            )
+        
+        with col2:
+            if st.button("➡️ Continue to First Steps", use_container_width=True):
+                st.session_state.current_stage = "first_steps"
+                st.session_state.messages = []
+                st.success("Moving to First Steps stage!")
                 st.rerun()
 
 col1, col2, col3 = st.columns(3)
@@ -1258,5 +1699,8 @@ with col3:
     elif st.session_state.current_stage == "profile_setup":
         profile_completed = sum(1 for key in st.session_state.profile_setup_checklist.values() if key)
         st.metric("✅ Tasks", f"{profile_completed}/5")
+    elif st.session_state.current_stage == "learning_preferences":
+        learning_completed = sum(1 for key in st.session_state.learning_checklist.values() if key)
+        st.metric("✅ Tasks", f"{learning_completed}/5")
     else:
         st.metric("✅ Stage", st.session_state.current_stage.replace('_', ' ').title())
