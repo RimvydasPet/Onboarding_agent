@@ -144,6 +144,29 @@ def summarize_text(text, max_words=15):
         return text
     return ' '.join(words[:max_words]) + "..."
 
+def summarize_goals_with_llm(goals_text, llm_instance):
+    """Use LLM to extract key points from user's goals."""
+    if not goals_text or len(goals_text.strip()) < 5:
+        return goals_text
+    
+    try:
+        summary_prompt = f"""Extract 2-3 key goal points from this text. Return ONLY a brief comma-separated list of goals (max 20 words total). No explanations.
+
+User said: "{goals_text}"
+
+Key goals:"""
+        
+        response = llm_instance.invoke([HumanMessage(content=summary_prompt)])
+        summary = response.content.strip()
+        
+        # Clean up the response
+        if summary and len(summary) < 150:
+            return summary
+        return summarize_text(goals_text, 20)
+    except Exception as e:
+        logger.warning(f"Failed to summarize goals with LLM: {e}")
+        return summarize_text(goals_text, 20)
+
 def generate_pdf(user_data):
     """Generate PDF with onboarding information."""
     buffer = io.BytesIO()
@@ -436,12 +459,14 @@ Current Progress: {completed_count}/3 required tasks completed"""
             
             messages = [SystemMessage(content=system_prompt)]
             
-            for msg in recent_messages[-5:]:
+            # Add previous messages (excluding the current one we just saved)
+            for msg in recent_messages[:-1][-5:]:
                 if msg["role"] == "user":
                     messages.append(HumanMessage(content=msg["content"]))
                 else:
                     messages.append(AIMessage(content=msg["content"]))
             
+            # Add current user input
             messages.append(HumanMessage(content=user_input))
             
             response = llm.invoke(messages)
@@ -504,7 +529,9 @@ Current Progress: {completed_count}/3 required tasks completed"""
                 goal_keywords = ["goal", "want to", "hoping to", "plan to", "learn", "improve", "achieve", 
                                "objective", "aim", "aspire", "interested in", "looking to"]
                 if any(keyword in user_input_lower for keyword in goal_keywords):
-                    st.session_state.user_data["goals"] = user_input
+                    # Summarize goals to key points using LLM
+                    summarized_goals = summarize_goals_with_llm(user_input, llm)
+                    st.session_state.user_data["goals"] = summarized_goals
                     st.session_state.checklist["goals_discussed"] = True
             
             st.session_state.messages.append({
