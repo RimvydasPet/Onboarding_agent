@@ -167,7 +167,7 @@ Key goals:"""
         logger.warning(f"Failed to summarize goals with LLM: {e}")
         return summarize_text(goals_text, 20)
 
-def generate_pdf(user_data):
+def generate_pdf(user_data, role_type=None, it_profile=None, sales_profile=None, current_stage="welcome"):
     """Generate PDF with onboarding information."""
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter, topMargin=0.5*inch, bottomMargin=0.5*inch)
@@ -211,6 +211,9 @@ def generate_pdf(user_data):
         ['Goals', goals],
     ]
     
+    if role_type:
+        data.append(['Role Type', role_type])
+    
     table = Table(data, colWidths=[2*inch, 4*inch])
     table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#667eea')),
@@ -231,6 +234,90 @@ def generate_pdf(user_data):
     story.append(table)
     story.append(Spacer(1, 0.3*inch))
     
+    # Add role-specific profile information
+    if current_stage == "profile_setup" or (it_profile and any(it_profile.values())) or (sales_profile and any(sales_profile.values())):
+        if role_type == "IT" and it_profile:
+            story.append(Paragraph("IT Profile Details", heading_style))
+            
+            it_data = [['Field', 'Information']]
+            if it_profile.get('department'):
+                it_data.append(['Department', summarize_text(it_profile['department'], 15)])
+            if it_profile.get('role_level'):
+                it_data.append(['Role Level', summarize_text(it_profile['role_level'], 10)])
+            if it_profile.get('tech_stack'):
+                it_data.append(['Tech Stack', summarize_text(it_profile['tech_stack'], 20)])
+            if it_profile.get('experience_years'):
+                it_data.append(['Experience', summarize_text(it_profile['experience_years'], 10)])
+            if it_profile.get('specialization'):
+                it_data.append(['Specialization', summarize_text(it_profile['specialization'], 15)])
+            if it_profile.get('preferred_ide'):
+                it_data.append(['Preferred IDE', summarize_text(it_profile['preferred_ide'], 10)])
+            if it_profile.get('os_preference'):
+                it_data.append(['OS Preference', summarize_text(it_profile['os_preference'], 10)])
+            if it_profile.get('github_username'):
+                it_data.append(['GitHub', summarize_text(it_profile['github_username'], 15)])
+            
+            if len(it_data) > 1:
+                it_table = Table(it_data, colWidths=[2*inch, 4*inch])
+                it_table.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#667eea')),
+                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                    ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                    ('FONTSIZE', (0, 0), (-1, 0), 12),
+                    ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                    ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+                    ('GRID', (0, 0), (-1, -1), 1, colors.black),
+                    ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                    ('LEFTPADDING', (0, 0), (-1, -1), 10),
+                    ('RIGHTPADDING', (0, 0), (-1, -1), 10),
+                    ('TOPPADDING', (0, 0), (-1, -1), 8),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+                ]))
+                story.append(it_table)
+                story.append(Spacer(1, 0.3*inch))
+        
+        elif role_type == "Sales" and sales_profile:
+            story.append(Paragraph("Sales Profile Details", heading_style))
+            
+            sales_data = [['Field', 'Information']]
+            if sales_profile.get('sales_role'):
+                sales_data.append(['Sales Role', summarize_text(sales_profile['sales_role'], 15)])
+            if sales_profile.get('seniority'):
+                sales_data.append(['Seniority', summarize_text(sales_profile['seniority'], 10)])
+            if sales_profile.get('territory'):
+                sales_data.append(['Territory', summarize_text(sales_profile['territory'], 15)])
+            if sales_profile.get('product_lines'):
+                sales_data.append(['Product Lines', summarize_text(sales_profile['product_lines'], 20)])
+            if sales_profile.get('crm_system'):
+                sales_data.append(['CRM System', summarize_text(sales_profile['crm_system'], 10)])
+            if sales_profile.get('sales_methodology'):
+                sales_data.append(['Methodology', summarize_text(sales_profile['sales_methodology'], 15)])
+            if sales_profile.get('quota'):
+                sales_data.append(['Quota', summarize_text(sales_profile['quota'], 15)])
+            if sales_profile.get('experience_years'):
+                sales_data.append(['Experience', summarize_text(sales_profile['experience_years'], 10)])
+            
+            if len(sales_data) > 1:
+                sales_table = Table(sales_data, colWidths=[2*inch, 4*inch])
+                sales_table.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#667eea')),
+                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                    ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                    ('FONTSIZE', (0, 0), (-1, 0), 12),
+                    ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                    ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+                    ('GRID', (0, 0), (-1, -1), 1, colors.black),
+                    ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                    ('LEFTPADDING', (0, 0), (-1, -1), 10),
+                    ('RIGHTPADDING', (0, 0), (-1, -1), 10),
+                    ('TOPPADDING', (0, 0), (-1, -1), 8),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+                ]))
+                story.append(sales_table)
+                story.append(Spacer(1, 0.3*inch))
+    
     story.append(Paragraph("Key Points", heading_style))
     
     key_points = [
@@ -242,6 +329,13 @@ def generate_pdf(user_data):
     if user_data.get('goals'):
         key_points.append("✓ Goals and objectives discussed")
     
+    if current_stage == "profile_setup" or (it_profile and any(it_profile.values())) or (sales_profile and any(sales_profile.values())):
+        key_points.append("✓ Profile setup initiated")
+        if role_type == "IT":
+            key_points.append("✓ IT-specific configuration started")
+        elif role_type == "Sales":
+            key_points.append("✓ Sales-specific setup started")
+    
     for point in key_points:
         story.append(Paragraph(f"• {point}", styles['Normal']))
         story.append(Spacer(1, 0.1*inch))
@@ -249,19 +343,27 @@ def generate_pdf(user_data):
     story.append(Spacer(1, 0.3*inch))
     story.append(Paragraph("Next Steps", heading_style))
     
-    next_steps = [
-        "Continue to the next onboarding stage",
-        "Explore the platform features",
-        "Set up your workspace preferences",
-        "Connect with your team members"
-    ]
+    if current_stage == "welcome":
+        next_steps = [
+            "Continue to Profile Setup stage",
+            "Complete role-specific configuration",
+            "Set up your workspace preferences",
+            "Connect with your team members"
+        ]
+    else:
+        next_steps = [
+            "Complete profile setup",
+            "Continue to Learning Preferences stage",
+            "Explore the platform features",
+            "Connect with your team and mentor"
+        ]
     
     for step in next_steps:
         story.append(Paragraph(f"• {step}", styles['Normal']))
         story.append(Spacer(1, 0.1*inch))
     
     story.append(Spacer(1, 0.5*inch))
-    story.append(Paragraph("Thank you for completing the first stage of onboarding! 🚀", styles['Normal']))
+    story.append(Paragraph("Thank you for your progress in the onboarding journey! 🚀", styles['Normal']))
     
     doc.build(story)
     buffer.seek(0)
@@ -294,8 +396,140 @@ if "user_data" not in st.session_state:
         "goals": ""
     }
 
+if "role_type" not in st.session_state:
+    st.session_state.role_type = None
+
+if "it_profile" not in st.session_state:
+    st.session_state.it_profile = {
+        "department": "",
+        "role_level": "",
+        "tech_stack": "",
+        "experience_years": "",
+        "specialization": "",
+        "preferred_ide": "",
+        "os_preference": "",
+        "github_username": ""
+    }
+
+if "sales_profile" not in st.session_state:
+    st.session_state.sales_profile = {
+        "sales_role": "",
+        "seniority": "",
+        "territory": "",
+        "product_lines": "",
+        "crm_system": "",
+        "sales_methodology": "",
+        "quota": "",
+        "experience_years": "",
+        "previous_industry": "",
+        "training_needs": ""
+    }
+
+if "profile_setup_checklist" not in st.session_state:
+    st.session_state.profile_setup_checklist = {
+        "profile_started": False,
+        "field_1": False,
+        "field_2": False,
+        "field_3": False,
+        "field_4": False
+    }
+
 if "conversation_started" not in st.session_state:
     st.session_state.conversation_started = False
+
+def detect_role_type(role_text):
+    """Detect if role is IT, Sales, or Other based on keywords."""
+    if not role_text:
+        return None
+    
+    role_lower = role_text.lower()
+    
+    it_keywords = [
+        "developer", "engineer", "programmer", "architect", "devops", "sre",
+        "data scientist", "analyst", "qa", "tester", "security", "admin",
+        "sysadmin", "dba", "frontend", "backend", "fullstack", "full stack",
+        "software", "tech lead", "cto", "technical", "it", "infrastructure",
+        "cloud", "machine learning", "ai", "data engineer", "ml engineer"
+    ]
+    
+    sales_keywords = [
+        "sales", "account executive", "ae", "sdr", "bdr", "account manager",
+        "sales engineer", "business development", "sales rep", "representative",
+        "inside sales", "field sales", "sales manager", "sales director",
+        "revenue", "quota", "hunter", "closer"
+    ]
+    
+    if any(keyword in role_lower for keyword in it_keywords):
+        return "IT"
+    elif any(keyword in role_lower for keyword in sales_keywords):
+        return "Sales"
+    else:
+        return "Other"
+
+def generate_stage_briefing(user_data, role_type, llm_instance):
+    """Generate personalized briefing for profile setup stage based on user's role."""
+    name = user_data.get('name', 'there')
+    role = user_data.get('role', 'team member')
+    goals = user_data.get('goals', '')
+    
+    if role_type == "IT":
+        topics = [
+            "Your team and who you'll be working with",
+            "The tools and technologies you'll be using",
+            "Your development environment setup",
+            "Access to systems and resources you'll need"
+        ]
+        focus = "technical setup and team introduction"
+        help_examples = "which team you'll join, what tools you'll use, or who your manager will be"
+    elif role_type == "Sales":
+        topics = [
+            "Your sales team and territory",
+            "The CRM and sales tools you'll be using",
+            "Your product lines and target customers",
+            "Your quota structure and support resources"
+        ]
+        focus = "sales setup and team introduction"
+        help_examples = "your territory, which CRM you'll use, or who your sales manager is"
+    else:
+        topics = [
+            "Your department and team members",
+            "The tools and systems you'll be using",
+            "Your key responsibilities and projects",
+            "Training and resources available to you"
+        ]
+        focus = "team introduction and setup"
+        help_examples = "your team, what tools you'll use, or who your manager will be"
+    
+    topics_formatted = "\n".join([f"• {topic}" for topic in topics])
+    
+    prompt = f"""Generate a brief, focused introduction message for {name} who is a {role} starting the Profile Setup stage.
+
+Goals mentioned: {goals if goals else 'Not specified'}
+
+The message should:
+1. Welcome them to Profile Setup and mention this is a TIME-LIMITED meeting
+2. Explain you'll efficiently guide them through their {focus}
+3. List these 4 key areas you MUST cover:
+{topics_formatted}
+4. Emphasize you'll help them understand what they need while moving efficiently
+5. Ask them to start with the first topic to make the most of your time together
+6. Be warm but focused and efficient (3-4 sentences max)
+
+The tone should be: "We have limited time, so I'll help you efficiently understand and set up everything you need. Let's get started!"
+
+Keep it energetic and action-oriented."""
+
+    try:
+        response = llm_instance.invoke([HumanMessage(content=prompt)])
+        return response.content.strip()
+    except Exception as e:
+        logger.warning(f"Failed to generate briefing with LLM: {e}")
+        return f"""Welcome to Profile Setup, {name}! 👋
+
+Our meeting time is limited, so let's efficiently cover the key areas for your role as a {role}:
+{topics_formatted}
+
+I'll guide you through each area and help you understand what you need. Let's get started with the first topic - which team or department will you be joining?"""
 
 memory = initialize_system()
 llm = get_llm()
@@ -342,6 +576,47 @@ if st.session_state.current_stage == "welcome":
     
     st.sidebar.markdown(f"**📊 {completed_count}/3 required tasks done**")
 
+elif st.session_state.current_stage == "profile_setup":
+    st.sidebar.markdown("### ✅ Profile Setup Tasks")
+    
+    if st.session_state.role_type:
+        st.sidebar.markdown(f"**Role Type:** {st.session_state.role_type}")
+    
+    if st.session_state.role_type == "IT":
+        checklist_items = [
+            ("profile_started", "Start profile setup"),
+            ("field_1", "Department/Team"),
+            ("field_2", "Tech stack & tools"),
+            ("field_3", "Experience & specialization"),
+            ("field_4", "Development preferences")
+        ]
+    elif st.session_state.role_type == "Sales":
+        checklist_items = [
+            ("profile_started", "Start profile setup"),
+            ("field_1", "Sales role & territory"),
+            ("field_2", "CRM & tools setup"),
+            ("field_3", "Sales methodology"),
+            ("field_4", "Quota & targets")
+        ]
+    else:
+        checklist_items = [
+            ("profile_started", "Start profile setup"),
+            ("field_1", "Department information"),
+            ("field_2", "Key responsibilities"),
+            ("field_3", "Tools & systems"),
+            ("field_4", "Training needs")
+        ]
+    
+    completed_count = sum(1 for key, _ in checklist_items if st.session_state.profile_setup_checklist[key])
+    
+    for key, label in checklist_items:
+        if st.session_state.profile_setup_checklist[key]:
+            st.sidebar.markdown(f"✅ ~~{label}~~")
+        else:
+            st.sidebar.markdown(f"⬜ {label}")
+    
+    st.sidebar.markdown(f"**📊 {completed_count}/{len(checklist_items)} tasks done**")
+
 st.sidebar.markdown("---")
 st.sidebar.markdown(f"**Session:** `{st.session_state.session_id[:8]}...`")
 st.sidebar.markdown(f"**Messages:** {len(st.session_state.messages)}")
@@ -361,6 +636,36 @@ if st.sidebar.button("🔄 New Session"):
         "role": "",
         "goals": ""
     }
+    st.session_state.role_type = None
+    st.session_state.it_profile = {
+        "department": "",
+        "role_level": "",
+        "tech_stack": "",
+        "experience_years": "",
+        "specialization": "",
+        "preferred_ide": "",
+        "os_preference": "",
+        "github_username": ""
+    }
+    st.session_state.sales_profile = {
+        "sales_role": "",
+        "seniority": "",
+        "territory": "",
+        "product_lines": "",
+        "crm_system": "",
+        "sales_methodology": "",
+        "quota": "",
+        "experience_years": "",
+        "previous_industry": "",
+        "training_needs": ""
+    }
+    st.session_state.profile_setup_checklist = {
+        "profile_started": False,
+        "field_1": False,
+        "field_2": False,
+        "field_3": False,
+        "field_4": False
+    }
     st.session_state.conversation_started = False
     st.rerun()
 
@@ -378,22 +683,56 @@ for message in st.session_state.messages:
         st.markdown(f'<div class="chat-message assistant-message"><strong>🤖 Assistant:</strong><br>{content}</div>', unsafe_allow_html=True)
 
 if len(st.session_state.messages) == 0:
-    quote, author = get_random_quote()
-    welcome_message = f"""
-    <div style="text-align: center; padding: 2rem;">
-        <h2>👋 Welcome to TechVenture Solutions!</h2>
-        <p style="font-size: 1.2rem; font-style: italic; color: #667eea; margin: 1.5rem 0;">
-            "{quote}" - {author}
-        </p>
-        <p style="font-size: 1rem; color: #666; margin: 1.5rem 0;">
-            At TechVenture Solutions, we're committed to making your onboarding experience smooth and engaging.
-        </p>
-        <p style="font-size: 1rem; color: #667eea; font-weight: bold; margin-top: 1.5rem;">
-            📖 Please read this welcome message, then type your name below or introduce yourself to begin your journey with us!
-        </p>
-    </div>
-    """
-    st.markdown(welcome_message, unsafe_allow_html=True)
+    if st.session_state.current_stage == "welcome":
+        quote, author = get_random_quote()
+        welcome_message = f"""
+        <div style="text-align: center; padding: 2rem;">
+            <h2>👋 Welcome to TechVenture Solutions!</h2>
+            <p style="font-size: 1.2rem; font-style: italic; color: #667eea; margin: 1.5rem 0;">
+                "{quote}" - {author}
+            </p>
+            <p style="font-size: 1rem; color: #666; margin: 1.5rem 0;">
+                At TechVenture Solutions, we're committed to making your onboarding experience smooth and engaging.
+            </p>
+            <p style="font-size: 1rem; color: #667eea; font-weight: bold; margin-top: 1.5rem;">
+                📖 Please read this welcome message, then type your name below or introduce yourself to begin your journey with us!
+            </p>
+        </div>
+        """
+        st.markdown(welcome_message, unsafe_allow_html=True)
+    
+    elif st.session_state.current_stage == "profile_setup":
+        role_type = st.session_state.role_type or "Other"
+        user_name = st.session_state.user_data.get('name', 'there')
+        
+        if role_type == "IT":
+            icon = "💻"
+            title = "IT Profile Setup"
+            description = "Let's configure your technical environment and preferences."
+        elif role_type == "Sales":
+            icon = "📊"
+            title = "Sales Profile Setup"
+            description = "Let's set up your sales tools and territory information."
+        else:
+            icon = "👤"
+            title = "Profile Setup"
+            description = "Let's gather some information to personalize your experience."
+        
+        profile_message = f"""
+        <div style="text-align: center; padding: 2rem;">
+            <h2>{icon} {title}</h2>
+            <p style="font-size: 1.2rem; color: #667eea; margin: 1.5rem 0;">
+                Welcome, {user_name}!
+            </p>
+            <p style="font-size: 1rem; color: #666; margin: 1.5rem 0;">
+                {description}
+            </p>
+            <p style="font-size: 1rem; color: #667eea; font-weight: bold; margin-top: 1.5rem;">
+                💬 I'll ask you a few questions to help set up your profile. Let's get started!
+            </p>
+        </div>
+        """
+        st.markdown(profile_message, unsafe_allow_html=True)
     
 user_input = st.chat_input("Type your message here...")
 
@@ -411,23 +750,24 @@ if user_input:
     
     with st.spinner("🤔 Thinking..."):
         try:
-            completed_count = sum(1 for key in ["welcome_read", "name_provided", "role_provided"] 
-                                if st.session_state.checklist[key])
-            
-            checklist_status = "\n".join([
-                f"- Welcome read: {'✓' if st.session_state.checklist['welcome_read'] else '✗'}",
-                f"- Name provided: {'✓' if st.session_state.checklist['name_provided'] else '✗'}",
-                f"- Role provided: {'✓' if st.session_state.checklist['role_provided'] else '✗'}",
-                f"- Goals discussed: {'✓' if st.session_state.checklist['goals_discussed'] else '✗'}"
-            ])
-            
-            user_data_status = "\n".join([
-                f"- Name: {st.session_state.user_data['name'] or 'Not provided'}",
-                f"- Role: {st.session_state.user_data['role'] or 'Not provided'}",
-                f"- Goals: {st.session_state.user_data['goals'] or 'Not provided'}"
-            ])
-            
-            system_prompt = f"""You are a friendly onboarding assistant helping new users get started.
+            if st.session_state.current_stage == "welcome":
+                completed_count = sum(1 for key in ["welcome_read", "name_provided", "role_provided"] 
+                                    if st.session_state.checklist[key])
+                
+                checklist_status = "\n".join([
+                    f"- Welcome read: {'✓' if st.session_state.checklist['welcome_read'] else '✗'}",
+                    f"- Name provided: {'✓' if st.session_state.checklist['name_provided'] else '✗'}",
+                    f"- Role provided: {'✓' if st.session_state.checklist['role_provided'] else '✗'}",
+                    f"- Goals discussed: {'✓' if st.session_state.checklist['goals_discussed'] else '✗'}"
+                ])
+                
+                user_data_status = "\n".join([
+                    f"- Name: {st.session_state.user_data['name'] or 'Not provided'}",
+                    f"- Role: {st.session_state.user_data['role'] or 'Not provided'}",
+                    f"- Goals: {st.session_state.user_data['goals'] or 'Not provided'}"
+                ])
+                
+                system_prompt = f"""You are a friendly onboarding assistant helping new users get started.
 
 Current Stage: Welcome Stage (First Stage)
 
@@ -454,6 +794,148 @@ IMPORTANT INSTRUCTIONS:
 - Use the user's name once you know it
 
 Current Progress: {completed_count}/3 required tasks completed"""
+            
+            elif st.session_state.current_stage == "profile_setup":
+                if not st.session_state.profile_setup_checklist["profile_started"]:
+                    st.session_state.profile_setup_checklist["profile_started"] = True
+                
+                role_type = st.session_state.role_type or "Other"
+                
+                if role_type == "IT":
+                    profile_status = "\n".join([
+                        f"- Department: {st.session_state.it_profile['department'] or 'Not provided'}",
+                        f"- Role Level: {st.session_state.it_profile['role_level'] or 'Not provided'}",
+                        f"- Tech Stack: {st.session_state.it_profile['tech_stack'] or 'Not provided'}",
+                        f"- Experience: {st.session_state.it_profile['experience_years'] or 'Not provided'}",
+                        f"- Specialization: {st.session_state.it_profile['specialization'] or 'Not provided'}",
+                        f"- Preferred IDE: {st.session_state.it_profile['preferred_ide'] or 'Not provided'}",
+                        f"- OS Preference: {st.session_state.it_profile['os_preference'] or 'Not provided'}",
+                        f"- GitHub Username: {st.session_state.it_profile['github_username'] or 'Not provided'}"
+                    ])
+                    
+                    system_prompt = f"""You are a helpful IT onboarding guide assisting a new technical team member.
+
+Current Stage: Profile Setup - IT Professional (Time-Limited Meeting)
+
+User Information:
+- Name: {st.session_state.user_data['name']}
+- Role: {st.session_state.user_data['role']}
+
+CRITICAL: Our meeting time is limited. You MUST efficiently cover these 4 key areas:
+1. ✅ Department/Team - Which team they're joining and who they'll work with
+2. ✅ Tech stack & tools - Programming languages, frameworks, and development tools
+3. ✅ Experience & specialization - Their background and areas of expertise
+4. ✅ Development preferences - IDE, OS, GitHub, and environment setup
+
+Current Profile Status:
+{profile_status}
+
+IMPORTANT INSTRUCTIONS:
+- Be FOCUSED and EFFICIENT - we have limited time to cover all topics
+- GUIDE them through each area while providing helpful context
+- Offer specific examples and suggestions to speed up the conversation
+- If they're unsure, PROVIDE typical options and ask them to choose
+- Move through topics systematically to ensure all areas are covered
+- Keep responses concise but informative (2-3 sentences max)
+- Proactively suggest common setups to help them decide quickly
+- Use their name: {st.session_state.user_data['name']}
+
+Example approach:
+- "Let's start with your team. You'll be joining the [Engineering/DevOps/Data] team. Which area fits your role best?"
+- "For tech stack, most {st.session_state.user_data['role']}s here use Python, JavaScript, or Java. Which languages will you be working with?"
+- "For your development environment, popular choices are VS Code, IntelliJ, or PyCharm. Which would you prefer?"
+- "What's your experience level - junior, mid-level, or senior? And any specializations like frontend, backend, or full-stack?"
+
+Remember: Be helpful but MOVE EFFICIENTLY through all 4 areas. Don't spend too long on any single topic.
+
+CRITICAL: You MUST ensure ALL 4 areas are covered before the profile setup is complete. Check the profile status and guide the conversation to cover any missing areas.
+"""
+
+                elif role_type == "Sales":
+                    profile_status = "\n".join([
+                        f"- Sales Role: {st.session_state.sales_profile['sales_role'] or 'Not provided'}",
+                        f"- Seniority: {st.session_state.sales_profile['seniority'] or 'Not provided'}",
+                        f"- Territory: {st.session_state.sales_profile['territory'] or 'Not provided'}",
+                        f"- Product Lines: {st.session_state.sales_profile['product_lines'] or 'Not provided'}",
+                        f"- CRM System: {st.session_state.sales_profile['crm_system'] or 'Not provided'}",
+                        f"- Sales Methodology: {st.session_state.sales_profile['sales_methodology'] or 'Not provided'}",
+                        f"- Quota: {st.session_state.sales_profile['quota'] or 'Not provided'}",
+                        f"- Experience: {st.session_state.sales_profile['experience_years'] or 'Not provided'}"
+                    ])
+                    
+                    system_prompt = f"""You are a helpful sales onboarding guide assisting a new sales team member.
+
+Current Stage: Profile Setup - Sales Professional (Time-Limited Meeting)
+
+User Information:
+- Name: {st.session_state.user_data['name']}
+- Role: {st.session_state.user_data['role']}
+
+CRITICAL: Our meeting time is limited. You MUST efficiently cover these 4 key areas:
+1. ✅ Sales role & territory - Their specific role type and territory assignment
+2. ✅ CRM & tools setup - Salesforce/HubSpot and sales engagement tools
+3. ✅ Sales methodology - Their approach (SPIN, Challenger, MEDDIC, etc.)
+4. ✅ Quota & targets - Performance metrics and support structure
+
+Current Profile Status:
+{profile_status}
+
+IMPORTANT INSTRUCTIONS:
+- Be FOCUSED and EFFICIENT - we have limited time to cover all topics
+- GUIDE them through each area while providing helpful context
+- Offer specific examples and suggestions to speed up the conversation
+- If they're unsure, PROVIDE typical options and ask them to choose
+- Move through topics systematically to ensure all areas are covered
+- Keep responses concise but energetic (2-3 sentences max)
+- Proactively suggest common setups to help them decide quickly
+- Use their name: {st.session_state.user_data['name']}
+
+Example approach:
+- "Let's start with your role. Are you an AE (Account Executive), SDR/BDR, or Account Manager? And which territory - geographic or vertical?"
+- "For CRM, we use Salesforce/HubSpot. Have you used it before? I'll help you get set up."
+- "What sales methodology do you prefer - SPIN, Challenger, or MEDDIC? Or would you like me to explain our approach?"
+- "Let's discuss your quota structure and the support resources available to help you hit your targets."
+
+Remember: Be helpful but MOVE EFFICIENTLY through all 4 areas. Don't spend too long on any single topic.
+
+CRITICAL: You MUST ensure ALL 4 areas are covered before the profile setup is complete. Check the profile status and guide the conversation to cover any missing areas.
+"""
+
+                else:
+                    system_prompt = f"""You are a helpful onboarding guide assisting a new team member.
+
+Current Stage: Profile Setup (Time-Limited Meeting)
+
+User Information:
+- Name: {st.session_state.user_data['name']}
+- Role: {st.session_state.user_data['role']}
+
+CRITICAL: Our meeting time is limited. You MUST efficiently cover these 4 key areas:
+1. ✅ Department information - Which department/team they're joining
+2. ✅ Key responsibilities - Main tasks and projects they'll work on
+3. ✅ Tools & systems - Software and platforms they'll use daily
+4. ✅ Training needs - Learning resources and support available
+
+IMPORTANT INSTRUCTIONS:
+- Be FOCUSED and EFFICIENT - we have limited time to cover all topics
+- GUIDE them through each area while providing helpful context
+- Offer specific examples and suggestions to speed up the conversation
+- If they're unsure, PROVIDE typical options and ask them to choose
+- Move through topics systematically to ensure all areas are covered
+- Keep responses warm but concise (2-3 sentences max)
+- Proactively suggest common setups to help them decide quickly
+- Use their name: {st.session_state.user_data['name']}
+
+Example approach:
+- "Let's start with your department. As a {st.session_state.user_data['role']}, which team are you joining - [suggest relevant departments]?"
+- "What will be your main responsibilities? I can outline typical tasks for your role if that helps."
+- "For tools, you'll likely use [suggest common tools for their role]. Which ones are you familiar with?"
+- "What training or support would be most helpful for you to get started?"
+
+Remember: Be helpful but MOVE EFFICIENTLY through all 4 areas. Don't spend too long on any single topic.
+
+CRITICAL: You MUST ensure ALL 4 areas are covered before the profile setup is complete. Check the profile status and guide the conversation to cover any missing areas.
+"""
 
             recent_messages = memory.get_messages(st.session_state.session_id, limit=10)
             
@@ -521,9 +1003,11 @@ Current Progress: {completed_count}/3 required tasks completed"""
                 if has_role_keyword or has_role_phrase:
                     st.session_state.user_data["role"] = user_input
                     st.session_state.checklist["role_provided"] = True
+                    st.session_state.role_type = detect_role_type(user_input)
                 elif len(user_input.split()) >= 1 and len(user_input) >= 3:
                     st.session_state.user_data["role"] = user_input
                     st.session_state.checklist["role_provided"] = True
+                    st.session_state.role_type = detect_role_type(user_input)
             
             if not st.session_state.checklist["goals_discussed"]:
                 goal_keywords = ["goal", "want to", "hoping to", "plan to", "learn", "improve", "achieve", 
@@ -533,6 +1017,92 @@ Current Progress: {completed_count}/3 required tasks completed"""
                     summarized_goals = summarize_goals_with_llm(user_input, llm)
                     st.session_state.user_data["goals"] = summarized_goals
                     st.session_state.checklist["goals_discussed"] = True
+            
+            # Profile Setup stage data extraction
+            if st.session_state.current_stage == "profile_setup":
+                role_type = st.session_state.role_type or "Other"
+                
+                if role_type == "IT":
+                    # Extract IT profile information
+                    # Field 1: Department/Team - be more flexible with matching
+                    if not st.session_state.it_profile["department"]:
+                        dept_keywords = ["engineering", "devops", "data", "qa", "security", "infrastructure", 
+                                       "team", "department", "backend", "frontend", "platform", "mobile", 
+                                       "cloud", "sre", "ops", "development", "product", "research"]
+                        # Also check if it's a short answer (likely a team name)
+                        if any(word in user_input_lower for word in dept_keywords) or (len(user_input.split()) <= 5 and len(user_input) > 2):
+                            st.session_state.it_profile["department"] = user_input
+                            st.session_state.profile_setup_checklist["field_1"] = True
+                    
+                    # Field 2: Tech stack & tools
+                    if not st.session_state.it_profile["tech_stack"]:
+                        tech_keywords = ["python", "java", "javascript", "react", "node", "go", "rust", "c++", "ruby", 
+                                       "php", "typescript", "framework", "language", "stack", "tool", "angular", "vue",
+                                       "django", "flask", "spring", "express", ".net", "docker", "kubernetes", "aws", "azure"]
+                        if any(word in user_input_lower for word in tech_keywords) or (len(user_input.split()) <= 10 and not st.session_state.it_profile["department"]):
+                            st.session_state.it_profile["tech_stack"] = user_input
+                            st.session_state.profile_setup_checklist["field_2"] = True
+                    
+                    # Field 3: Experience & specialization
+                    if not st.session_state.it_profile["experience_years"]:
+                        exp_keywords = ["year", "experience", "junior", "senior", "mid-level", "lead", "beginner", "expert", "1", "2", "3", "4", "5"]
+                        if any(word in user_input_lower for word in exp_keywords):
+                            st.session_state.it_profile["experience_years"] = user_input
+                            if not st.session_state.it_profile["specialization"]:
+                                st.session_state.profile_setup_checklist["field_3"] = True
+                    
+                    if not st.session_state.it_profile["specialization"]:
+                        spec_keywords = ["frontend", "backend", "full-stack", "fullstack", "mobile", "cloud", "devops", 
+                                       "data", "ml", "ai", "security", "architect", "specialist", "engineer"]
+                        if any(word in user_input_lower for word in spec_keywords) or (st.session_state.it_profile["experience_years"] and len(user_input.split()) <= 8):
+                            st.session_state.it_profile["specialization"] = user_input
+                            st.session_state.profile_setup_checklist["field_3"] = True
+                    
+                    # Field 4: Development preferences (IDE, OS, GitHub)
+                    if not st.session_state.it_profile["preferred_ide"]:
+                        ide_keywords = ["vscode", "vs code", "visual studio", "intellij", "pycharm", "webstorm", "sublime", 
+                                      "vim", "emacs", "atom", "ide", "editor", "code", "studio"]
+                        if any(word in user_input_lower for word in ide_keywords):
+                            st.session_state.it_profile["preferred_ide"] = user_input
+                            st.session_state.profile_setup_checklist["field_4"] = True
+                    
+                    if not st.session_state.it_profile["os_preference"]:
+                        os_keywords = ["windows", "macos", "mac", "linux", "ubuntu", "debian", "fedora", "os", "operating"]
+                        if any(word in user_input_lower for word in os_keywords):
+                            st.session_state.it_profile["os_preference"] = user_input
+                            if not st.session_state.it_profile["preferred_ide"]:
+                                st.session_state.profile_setup_checklist["field_4"] = True
+                    
+                    if not st.session_state.it_profile["github_username"]:
+                        github_keywords = ["github", "gitlab", "bitbucket", "username", "@", "git"]
+                        if any(word in user_input_lower for word in github_keywords):
+                            st.session_state.it_profile["github_username"] = user_input
+                
+                elif role_type == "Sales":
+                    # Extract Sales profile information
+                    if not st.session_state.sales_profile["sales_role"] and any(word in user_input_lower for word in ["ae", "account executive", "sdr", "bdr", "account manager", "sales engineer", "inside", "field"]):
+                        st.session_state.sales_profile["sales_role"] = user_input
+                        st.session_state.profile_setup_checklist["field_1"] = True
+                    
+                    if not st.session_state.sales_profile["territory"] and any(word in user_input_lower for word in ["territory", "region", "north", "south", "east", "west", "emea", "apac", "americas", "enterprise", "smb", "mid-market"]):
+                        st.session_state.sales_profile["territory"] = user_input
+                        if not st.session_state.sales_profile["sales_role"]:
+                            st.session_state.profile_setup_checklist["field_1"] = True
+                    
+                    if not st.session_state.sales_profile["crm_system"] and any(word in user_input_lower for word in ["salesforce", "hubspot", "pipedrive", "crm", "zoho", "dynamics"]):
+                        st.session_state.sales_profile["crm_system"] = user_input
+                        st.session_state.profile_setup_checklist["field_2"] = True
+                    
+                    if not st.session_state.sales_profile["sales_methodology"] and any(word in user_input_lower for word in ["spin", "challenger", "meddic", "sandler", "solution selling", "methodology"]):
+                        st.session_state.sales_profile["sales_methodology"] = user_input
+                        st.session_state.profile_setup_checklist["field_3"] = True
+                    
+                    if not st.session_state.sales_profile["quota"] and any(word in user_input_lower for word in ["quota", "target", "$", "k", "million", "revenue"]):
+                        st.session_state.sales_profile["quota"] = user_input
+                        st.session_state.profile_setup_checklist["field_4"] = True
+                    
+                    if not st.session_state.sales_profile["experience_years"] and any(word in user_input_lower for word in ["year", "experience", "junior", "senior", "mid-level"]):
+                        st.session_state.sales_profile["experience_years"] = user_input
             
             st.session_state.messages.append({
                 "role": "assistant",
@@ -544,7 +1114,11 @@ Current Progress: {completed_count}/3 required tasks completed"""
             
             memory.update_context(st.session_state.session_id, {
                 "checklist": st.session_state.checklist,
-                "user_data": st.session_state.user_data
+                "user_data": st.session_state.user_data,
+                "profile_setup_checklist": st.session_state.profile_setup_checklist,
+                "role_type": st.session_state.role_type,
+                "it_profile": st.session_state.it_profile,
+                "sales_profile": st.session_state.sales_profile
             })
             
             db = next(get_db())
@@ -597,13 +1171,19 @@ st.markdown("---")
 completed_required = sum(1 for key in ["welcome_read", "name_provided", "role_provided"] 
                         if st.session_state.checklist[key])
 
-if completed_required >= 3:
+if completed_required >= 3 and st.session_state.current_stage == "welcome":
     st.success("🎉 Congratulations! You've completed all required tasks for this stage!")
     
     col1, col2 = st.columns([1, 1])
     
     with col1:
-        pdf_buffer = generate_pdf(st.session_state.user_data)
+        pdf_buffer = generate_pdf(
+            st.session_state.user_data,
+            role_type=st.session_state.role_type,
+            it_profile=st.session_state.it_profile,
+            sales_profile=st.session_state.sales_profile,
+            current_stage=st.session_state.current_stage
+        )
         st.download_button(
             label="📄 Download PDF Summary",
             data=pdf_buffer,
@@ -616,8 +1196,55 @@ if completed_required >= 3:
     with col2:
         if st.button("➡️ Continue to Next Stage", use_container_width=True):
             st.session_state.current_stage = "profile_setup"
+            st.session_state.messages = []
+            
+            briefing_message = generate_stage_briefing(
+                st.session_state.user_data,
+                st.session_state.role_type,
+                llm
+            )
+            
+            st.session_state.messages.append({
+                "role": "assistant",
+                "content": briefing_message,
+                "timestamp": datetime.now().isoformat()
+            })
+            
+            memory.save_message(st.session_state.session_id, "assistant", briefing_message)
+            
             st.success("Moving to Profile Setup stage!")
             st.rerun()
+
+elif st.session_state.current_stage == "profile_setup":
+    profile_completed = sum(1 for key in st.session_state.profile_setup_checklist.values() if key)
+    
+    if profile_completed >= 5:
+        st.success("🎉 Great! You've completed all 4 profile setup areas!")
+        
+        col1, col2 = st.columns([1, 1])
+        
+        with col1:
+            pdf_buffer = generate_pdf(
+                st.session_state.user_data,
+                role_type=st.session_state.role_type,
+                it_profile=st.session_state.it_profile,
+                sales_profile=st.session_state.sales_profile,
+                current_stage=st.session_state.current_stage
+            )
+            st.download_button(
+                label="📄 Download Profile Summary",
+                data=pdf_buffer,
+                file_name=f"profile_summary_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
+                mime="application/pdf",
+                type="primary",
+                use_container_width=True
+            )
+        
+        with col2:
+            if st.button("➡️ Continue to Learning Preferences", use_container_width=True):
+                st.session_state.current_stage = "learning_preferences"
+                st.success("Moving to Learning Preferences stage!")
+                st.rerun()
 
 col1, col2, col3 = st.columns(3)
 with col1:
@@ -626,4 +1253,10 @@ with col2:
     redis_status = "✅ Active" if memory.redis_available else "⚠️ Fallback"
     st.metric("Memory", redis_status)
 with col3:
-    st.metric("✅ Tasks", f"{completed_required}/3")
+    if st.session_state.current_stage == "welcome":
+        st.metric("✅ Tasks", f"{completed_required}/3")
+    elif st.session_state.current_stage == "profile_setup":
+        profile_completed = sum(1 for key in st.session_state.profile_setup_checklist.values() if key)
+        st.metric("✅ Tasks", f"{profile_completed}/5")
+    else:
+        st.metric("✅ Stage", st.session_state.current_stage.replace('_', ' ').title())
