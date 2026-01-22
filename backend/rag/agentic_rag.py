@@ -10,166 +10,139 @@ logger = logging.getLogger(__name__)
 
 
 class AgenticRAG:
-    """
-    Agentic RAG system with query planning, multi-step retrieval, and reranking.
+    """Agentic RAG system with query planning and reranking."""
     
-    Features:
-    - Intelligent query analysis and planning
-    - Multi-strategy retrieval (similarity, MMR)
-    - Document reranking for relevance
-    - Source validation and citation
-    - Context-aware retrieval
-    """
-    
-    def __init__(self, collection_name: str = "onboarding_docs"):
-        self.document_processor = DocumentProcessor()
-        self.vector_store = VectorStore(collection_name)
+    def __init__(self):
+        """Initialize the agentic RAG system."""
+        self.document_processor = DocumentProcessor(chunk_size=1000, chunk_overlap=200)
+        self.vector_store = VectorStore(collection_name="onboarding_docs")
         self.query_planner = QueryPlanner()
         self.reranker = Reranker()
-        logger.info("AgenticRAG initialized")
-    
-    def add_documents(self, texts: List[str], metadatas: List[Dict[str, Any]] = None) -> List[str]:
-        """Process and add documents to the vector store."""
-        if not texts:
-            return []
         
-        metadatas = metadatas or [{}] * len(texts)
-        
-        all_documents = []
-        for text, metadata in zip(texts, metadatas):
-            docs = self.document_processor.process_text(text, metadata)
-            all_documents.extend(docs)
-        
-        ids = self.vector_store.add_documents(all_documents)
-        logger.info(f"Added {len(all_documents)} document chunks from {len(texts)} sources")
-        return ids
+        logger.info("Initialized AgenticRAG system")
     
-    def add_document_objects(self, documents: List[Document]) -> List[str]:
-        """Process and add Document objects to the vector store."""
-        processed_docs = self.document_processor.process_documents(documents)
-        ids = self.vector_store.add_documents(processed_docs)
-        logger.info(f"Added {len(processed_docs)} processed document chunks")
-        return ids
-    
-    def retrieve(
-        self,
-        query: str,
-        context: Dict[str, Any] = None,
-        top_k: int = 5
-    ) -> Dict[str, Any]:
+    def initialize_knowledge_base(self, documents: List[Document]) -> None:
         """
-        Agentic retrieval with query planning and reranking.
+        Initialize the knowledge base with documents.
         
         Args:
-            query: User query
-            context: Additional context (user info, conversation history, etc.)
-            top_k: Number of top documents to return
-        
-        Returns:
-            Dictionary with retrieved documents, citations, and metadata
+            documents: List of raw documents to add
         """
-        context = context or {}
+        logger.info(f"Initializing knowledge base with {len(documents)} documents")
         
-        # Step 1: Analyze query
-        analysis = self.query_planner.analyze_query(query, context)
-        logger.info(f"Query analysis: {analysis}")
+        chunked_docs = self.document_processor.process_documents(documents)
         
-        # Step 2: Check if retrieval is needed
-        if not self.query_planner.should_retrieve(query, analysis):
+        self.vector_store.add_documents(chunked_docs)
+        
+        count = self.vector_store.get_collection_count()
+        logger.info(f"Knowledge base initialized with {count} chunks")
+    
+    def retrieve(
+        self, 
+        query: str, 
+        current_stage: str = "welcome",
+        top_k: int = 5,
+        use_reranking: bool = True
+    ) -> Dict[str, Any]:
+        """
+        Retrieve relevant documents for a query using agentic approach.
+        
+        Args:
+            query: User's query
+            current_stage: Current onboarding stage
+            top_k: Number of documents to return
+            use_reranking: Whether to use reranking
+            
+        Returns:
+            Dictionary with retrieved documents and metadata
+        """
+        logger.info(f"Retrieving documents for query: {query[:100]}...")
+        
+        analysis = self.query_planner.analyze_query(query, current_stage)
+        
+        if not analysis.get("needs_retrieval", True):
+            logger.info("Query doesn't need document retrieval")
             return {
                 "documents": [],
-                "citations": [],
                 "analysis": analysis,
-                "retrieval_performed": False,
-                "message": "No retrieval needed for this query"
+                "message": "No document retrieval needed"
             }
         
-        # Step 3: Plan retrieval strategy
-        strategy = self.query_planner.plan_retrieval_strategy(analysis)
-        logger.info(f"Retrieval strategy: {strategy}")
-        
-        # Step 4: Generate search queries
         search_queries = self.query_planner.generate_search_queries(query, analysis)
-        logger.info(f"Search queries: {search_queries}")
         
-        # Step 5: Retrieve documents
         all_documents = []
+        seen_content = set()
+        
+        k_per_query = max(3, analysis.get("suggested_k", 5))
+        
         for search_query in search_queries:
-            docs = self._retrieve_with_strategy(search_query, strategy)
-            all_documents.extend(docs)
+            docs = self.vector_store.similarity_search(
+                query=search_query,
+                k=k_per_query
+            )
+            
+            for doc in docs:
+                content_hash = hash(doc.page_content)
+                if content_hash not in seen_content:
+                    seen_content.add(content_hash)
+                    all_documents.append(doc)
         
-        # Remove duplicates based on content
-        unique_docs = self._deduplicate_documents(all_documents)
+        logger.info(f"Retrieved {len(all_documents)} unique documents from {len(search_queries)} queries")
         
-        # Step 6: Rerank if needed
-        if strategy.get("rerank", False) and len(unique_docs) > top_k:
-            final_docs = self.reranker.rerank_documents(query, unique_docs, top_k)
-        else:
-            final_docs = unique_docs[:top_k]
-        
-        # Step 7: Validate sources
-        validated_docs = self.reranker.validate_sources(final_docs)
-        
-        # Step 8: Generate citations
-        citations = self.reranker.add_citations(validated_docs)
-        
-        return {
-            "documents": validated_docs,
-            "citations": citations,
-            "analysis": analysis,
-            "strategy": strategy,
-            "retrieval_performed": True,
-            "num_results": len(validated_docs)
-        }
-    
-    def _retrieve_with_strategy(
-        self,
-        query: str,
-        strategy: Dict[str, Any]
-    ) -> List[Document]:
-        """Retrieve documents using the specified strategy."""
-        method = strategy.get("method", "similarity")
-        k = strategy.get("k", 5)
-        
-        if method == "mmr":
-            fetch_k = strategy.get("fetch_k", 20)
-            return self.vector_store.max_marginal_relevance_search(
-                query, k=k, fetch_k=fetch_k
+        if use_reranking and len(all_documents) > top_k:
+            categories = analysis.get("categories", [])
+            if categories:
+                filtered_docs = self.reranker.filter_by_metadata(
+                    all_documents,
+                    category=categories[0] if categories else None
+                )
+                if filtered_docs:
+                    all_documents = filtered_docs
+            
+            final_documents = self.reranker.rerank_documents(
+                query=query,
+                documents=all_documents,
+                top_k=top_k
             )
         else:
-            return self.vector_store.similarity_search(query, k=k)
-    
-    def _deduplicate_documents(self, documents: List[Document]) -> List[Document]:
-        """Remove duplicate documents based on content similarity."""
-        if not documents:
-            return []
+            final_documents = all_documents[:top_k]
         
-        seen_contents = set()
-        unique_docs = []
-        
-        for doc in documents:
-            content_hash = hash(doc.page_content.strip())
-            if content_hash not in seen_contents:
-                seen_contents.add(content_hash)
-                unique_docs.append(doc)
-        
-        return unique_docs
-    
-    def get_stats(self) -> Dict[str, Any]:
-        """Get statistics about the RAG system."""
         return {
-            "total_documents": self.vector_store.get_collection_count(),
-            "collection_name": self.vector_store.collection_name,
-            "components": {
-                "document_processor": "active",
-                "vector_store": "active",
-                "query_planner": "active",
-                "reranker": "active"
-            }
+            "documents": final_documents,
+            "analysis": analysis,
+            "num_retrieved": len(all_documents),
+            "num_returned": len(final_documents),
+            "search_queries": search_queries
         }
     
-    def clear_collection(self):
-        """Clear all documents from the vector store."""
+    def get_context_string(self, documents: List[Document]) -> str:
+        """
+        Convert documents to a context string for the LLM.
+        
+        Args:
+            documents: List of documents
+            
+        Returns:
+            Formatted context string
+        """
+        if not documents:
+            return ""
+        
+        context_parts = []
+        for i, doc in enumerate(documents, 1):
+            source = doc.metadata.get('source', 'unknown')
+            category = doc.metadata.get('category', 'general')
+            score = doc.metadata.get('score', 0.0)
+            
+            context_parts.append(
+                f"[Source {i}: {source} | Category: {category} | Relevance: {score:.2f}]\n"
+                f"{doc.page_content}\n"
+            )
+        
+        return "\n---\n".join(context_parts)
+    
+    def reset_knowledge_base(self) -> None:
+        """Delete and reset the knowledge base."""
         self.vector_store.delete_collection()
-        self.vector_store._initialize_store()
-        logger.info("Collection cleared and reinitialized")
+        self.vector_store = VectorStore(collection_name="onboarding_docs")
+        logger.info("Knowledge base reset")

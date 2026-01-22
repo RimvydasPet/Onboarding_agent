@@ -115,11 +115,12 @@ The AI Onboarding Assistant is a conversational AI agent designed to guide new u
 
 ### Technology Stack
 
-- **Google Gemini Pro**: LLM for conversational responses
+- **Google Gemini 2.0 Flash**: LLM for conversational responses
 - **Streamlit**: Interactive web interface
 - **SQLAlchemy**: ORM for persistent storage
-- **Redis**: In-memory cache for session data (optional, with fallback)
+- **Redis**: In-memory cache for session data (with in-memory fallback)
 - **Pydantic**: Data validation and settings management
+- **LangChain**: Framework for LLM integration
 - **Python 3.11+**: Core programming language
 
 ---
@@ -182,11 +183,30 @@ Download from https://redis.io/download
 
 ### Quick Start
 
-#### Run the Chat Interface
+#### Option 1: Simple Chat (No RAG)
 
 ```bash
 streamlit run simple_chat_app.py
 ```
+
+**Features:**
+- Fast and lightweight
+- General conversational AI
+- Memory systems
+- Good for basic onboarding
+
+#### Option 2: Advanced Chat with RAG + Agent ⭐ Recommended
+
+```bash
+streamlit run chat_app.py
+```
+
+**Features:**
+- Full RAG (Retrieval-Augmented Generation)
+- LangGraph agentic workflow
+- Document retrieval from knowledge base
+- Source citations
+- More accurate, grounded responses
 
 Open your browser to `http://localhost:8501`
 
@@ -194,23 +214,32 @@ The interface will show:
 - 💬 Interactive chat with the AI assistant
 - 🎯 Progress tracking through 5 onboarding stages
 - 📊 Session statistics and metrics
+- 📚 Source citations (RAG version)
 - 🎨 Beautiful purple gradient UI
 
 ### Try These Questions
 
 Once the app is running, try asking:
 
+**General Questions:**
 - "How do I create a new project?"
 - "What features are available?"
 - "Tell me about getting started"
-- "I need help with my account"
+
+**Specific Questions (RAG excels here):**
+- "What integrations are available?"
+- "How do I set up two-factor authentication?"
 - "What are the keyboard shortcuts?"
+- "What's included in the Pro plan?"
+- "How do I use the mobile app?"
 
 The assistant will:
-- Provide helpful, context-aware responses
+- Retrieve relevant documentation from the knowledge base
+- Provide accurate, cited responses
 - Remember your conversation history
 - Track your progress through onboarding stages
 - Save important preferences to long-term memory
+- Show sources for transparency (RAG version)
 
 ---
 
@@ -381,14 +410,24 @@ Response:
 ```
 Onboarding_agent/
 ├── backend/
-│   ├── agent/           # Agent implementation (advanced features)
-│   ├── rag/             # RAG system (advanced features)
-│   ├── memory/          # Memory systems (active)
-│   ├── database/        # SQLAlchemy models (active)
-│   ├── models/          # Pydantic schemas (active)
-│   ├── auth/            # Authentication (foundation)
+│   ├── agent/           # LangGraph agentic workflow
+│   │   ├── state.py     # Agent state definition
+│   │   ├── nodes.py     # Agent nodes (analyze, retrieve, respond)
+│   │   └── graph.py     # LangGraph workflow
+│   ├── rag/             # RAG system components
+│   │   ├── vector_store.py      # ChromaDB integration
+│   │   ├── document_processor.py # Text chunking
+│   │   ├── query_planner.py     # Query analysis
+│   │   ├── reranker.py          # Result reranking
+│   │   ├── agentic_rag.py       # Main RAG engine
+│   │   ├── sample_documents.py  # Knowledge base
+│   │   └── initializer.py       # RAG initialization
+│   ├── memory/          # Memory systems (short-term & long-term)
+│   ├── database/        # SQLAlchemy models & connection
+│   ├── models/          # Pydantic schemas
 │   └── config.py        # Configuration management
-├── simple_chat_app.py   # Main chat interface ⭐
+├── simple_chat_app.py   # Simple chat (no RAG)
+├── chat_app.py          # Advanced chat with RAG + Agent ⭐
 ├── requirements.txt     # Dependencies
 ├── README.md            # This file
 ├── .env.example         # Environment template
@@ -411,10 +450,10 @@ Educational project - Turing College
 
 ## 🙏 Acknowledgments
 
-- **LangChain & LangGraph**: Conversation orchestration
+- **LangChain**: LLM integration framework
 - **Google Gemini**: LLM capabilities
-- **ChromaDB**: Vector storage
 - **Streamlit**: Rapid UI development
+- **SQLAlchemy**: Database ORM
 
 ---
 
