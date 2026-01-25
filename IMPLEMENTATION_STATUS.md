@@ -119,7 +119,7 @@
 
 ### 9. REST API ✓
 - **FastAPI Application** (`api.py`):
-  - POST /chat endpoint for conversational AI
+  - POST /chat endpoint for conversational AI (Protected)
   - Request/response models (APIChatRequest, APIChatResponse)
   - CORS middleware for cross-origin requests
   - Health check endpoints (/, /health)
@@ -128,11 +128,25 @@
   - Integration with LangGraph agent workflow
   - Comprehensive error handling and logging
 
+### 10. Authentication System ✓
+- **JWT-based Authentication** (`backend/auth/`):
+  - Password hashing with bcrypt
+  - JWT token generation and validation
+  - OAuth2 password flow implementation
+  - User registration endpoint (POST /auth/register)
+  - User login endpoint (POST /auth/login)
+  - Get current user endpoint (GET /auth/me)
+  - Protected route dependencies
+  - Token expiration (30 minutes, configurable)
+  - Role-based access control support
+  - Automatic onboarding profile creation on registration
+
 ## 📦 Current Project State
 
 The project is a **production-ready onboarding assistant** with:
 - ✅ Two chat interfaces (simple and advanced)
 - ✅ REST API with FastAPI
+- ✅ JWT-based authentication system
 - ✅ Full RAG system with document retrieval
 - ✅ LangGraph agentic workflow
 - ✅ ChromaDB vector database
@@ -141,6 +155,7 @@ The project is a **production-ready onboarding assistant** with:
 - ✅ Session management
 - ✅ Database integration
 - ✅ Source citations and transparency
+- ✅ Secure user registration and login
 
 ## 🎯 Usage
 
@@ -163,7 +178,9 @@ Then access the API at `http://localhost:8000` and interactive docs at `http://l
 ## 🏗️ Architecture
 
 ```
-User Query
+User Authentication (JWT)
+    ↓
+User Query (Protected)
     ↓
 LangGraph Agent
     ↓

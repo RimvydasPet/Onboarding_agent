@@ -25,3 +25,8 @@ streamlit>=1.30.0
 # REST API
 fastapi>=0.109.0
 uvicorn>=0.27.0
+
+# Authentication
+python-jose[cryptography]>=3.3.0
+passlib[bcrypt]>=1.7.4
+python-multipart>=0.0.6

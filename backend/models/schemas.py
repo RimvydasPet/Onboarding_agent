@@ -94,7 +94,6 @@ class APIChatRequest(BaseModel):
     """Request model for POST /chat endpoint"""
     message: str
     session_id: Optional[str] = None
-    user_id: int = 1
 
 
 class APIChatResponse(BaseModel):

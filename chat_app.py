@@ -43,13 +43,21 @@ st.markdown("""
         background: #f7fafc;
         border: 1px solid #e2e8f0;
         margin-right: 20%;
+        color: #2d3748;
     }
     .source-card {
-        background: #fff;
-        border: 1px solid #e2e8f0;
+        background: linear-gradient(135deg, #e0e7ff 0%, #dbeafe 100%);
+        border: 1px solid #667eea;
         border-radius: 8px;
         padding: 1rem;
         margin: 0.5rem 0;
+        color: #1e293b;
+    }
+    .source-card strong {
+        color: #667eea;
+    }
+    .source-card em {
+        color: #475569;
     }
     @keyframes fadeIn {
         from { opacity: 0; transform: translateY(10px); }
@@ -221,22 +229,38 @@ if user_input:
     st.rerun()
 
 if len(st.session_state.messages) == 0:
-    st.markdown("""
-    <div style="text-align: center; padding: 2rem;">
-        <h2>👋 Welcome to TechVenture Solutions!</h2>
-        <p style="font-size: 1.2rem; font-style: italic; color: #667eea; margin: 1.5rem 0;">
-            "Success is not final, failure is not fatal: it is the courage to continue that counts." - Winston Churchill
-        </p>
-        <p style="font-size: 1rem; color: #666; margin: 1.5rem 0;">
-            I'm your AI onboarding assistant, powered by advanced RAG (Retrieval-Augmented Generation) 
-            and agentic AI technology. I can answer questions about our platform using our comprehensive 
-            knowledge base.
-        </p>
-        <p style="font-size: 1rem; color: #667eea; font-weight: bold; margin-top: 1.5rem;">
-            💡 Try asking: "How do I create my first project?" or "What integrations are available?"
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
+    with st.spinner("🤖 Your onboarding assistant is ready..."):
+        try:
+            result = run_agent(
+                user_input="I just arrived and I'm ready to start onboarding",
+                user_id=st.session_state.user_id,
+                session_id=st.session_state.session_id,
+                current_stage=st.session_state.current_stage
+            )
+            
+            st.session_state.messages.append({
+                "role": "assistant",
+                "content": result["response"],
+                "sources": result.get("sources", []),
+                "timestamp": datetime.now().isoformat()
+            })
+            st.rerun()
+        except Exception as e:
+            logger.error(f"Error generating welcome message: {e}")
+            st.markdown("""
+            <div style="text-align: center; padding: 2rem;">
+                <h2>👋 Welcome to TechVenture Solutions!</h2>
+                <p style="font-size: 1.2rem; font-style: italic; color: #667eea; margin: 1.5rem 0;">
+                    "Success is not final, failure is not fatal: it is the courage to continue that counts." - Winston Churchill
+                </p>
+                <p style="font-size: 1rem; color: #666; margin: 1.5rem 0;">
+                    I'm your AI onboarding assistant, here to help you get started with our platform.
+                </p>
+                <p style="font-size: 1rem; color: #667eea; font-weight: bold; margin-top: 1.5rem;">
+                    Type a message below to begin your journey with us!
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
 
 st.markdown("---")
 col1, col2, col3, col4 = st.columns(4)

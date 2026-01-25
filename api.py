@@ -1,8 +1,13 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from backend.models.schemas import APIChatRequest, APIChatResponse
+from fastapi.security import OAuth2PasswordRequestForm
+from sqlalchemy.orm import Session
+from backend.models.schemas import APIChatRequest, APIChatResponse, UserCreate, User, Token
 from backend.agent.graph import run_agent
-from backend.database.connection import init_db
+from backend.database.connection import init_db, get_db
+from backend.database.models import UserDB
+from backend.auth.service import AuthService
+from backend.auth.dependencies import get_current_active_user
 import logging
 import uuid
 
@@ -42,13 +47,63 @@ async def root():
     }
 
 
-@app.post("/chat", response_model=APIChatResponse)
-async def chat(request: APIChatRequest):
+@app.post("/auth/register", response_model=User, status_code=201)
+async def register(user_data: UserCreate, db: Session = Depends(get_db)):
     """
-    Chat endpoint for conversational AI with RAG.
+    Register a new user.
     
     Args:
-        request: APIChatRequest containing message, optional session_id, and user_id
+        user_data: User registration data (email, password, full_name)
+        db: Database session
+    
+    Returns:
+        Created user object
+    """
+    return AuthService.register_user(user_data, db)
+
+
+@app.post("/auth/login", response_model=Token)
+async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    """
+    Login endpoint to get access token.
+    
+    Args:
+        form_data: OAuth2 form with username (email) and password
+        db: Database session
+    
+    Returns:
+        Token object with access_token and token_type
+    """
+    from backend.models.schemas import UserLogin
+    login_data = UserLogin(email=form_data.username, password=form_data.password)
+    return AuthService.login_user(login_data, db)
+
+
+@app.get("/auth/me", response_model=User)
+async def get_current_user_info(current_user: UserDB = Depends(get_current_active_user)):
+    """
+    Get current authenticated user information.
+    
+    Args:
+        current_user: Current authenticated user from JWT token
+    
+    Returns:
+        User object with user information
+    """
+    return User.model_validate(current_user)
+
+
+@app.post("/chat", response_model=APIChatResponse)
+async def chat(
+    request: APIChatRequest,
+    current_user: UserDB = Depends(get_current_active_user)
+):
+    """
+    Chat endpoint for conversational AI with RAG (Protected - requires authentication).
+    
+    Args:
+        request: APIChatRequest containing message and optional session_id
+        current_user: Current authenticated user from JWT token
     
     Returns:
         APIChatResponse with response, session_id, sources, and current_stage
@@ -56,11 +111,11 @@ async def chat(request: APIChatRequest):
     try:
         session_id = request.session_id or str(uuid.uuid4())
         
-        logger.info(f"Processing chat request for user {request.user_id}, session {session_id}")
+        logger.info(f"Processing chat request for user {current_user.id}, session {session_id}")
         
         result = run_agent(
             user_input=request.message,
-            user_id=request.user_id,
+            user_id=current_user.id,
             session_id=session_id,
             current_stage="welcome"
         )

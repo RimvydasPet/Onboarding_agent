@@ -210,7 +210,7 @@ streamlit run chat_app.py
 
 Open your browser to `http://localhost:8501`
 
-#### Option 3: REST API Server
+#### Option 3: REST API Server with Authentication 🔐
 
 ```bash
 # Start the API server
@@ -223,21 +223,50 @@ chmod +x run_api.sh
 
 **Features:**
 - RESTful API for integration with other applications
-- POST /chat endpoint for conversational AI
+- JWT-based authentication for secure access
+- Protected chat endpoint requiring authentication
+- User registration and login
 - Automatic session management
 - CORS enabled for web applications
 - Interactive API documentation at `http://localhost:8000/docs`
 
-**Example API Usage:**
+**Authentication Flow:**
 
+1. **Register a new user:**
 ```bash
-# Send a chat message
-curl -X POST "http://localhost:8000/chat" \
+curl -X POST "http://localhost:8000/auth/register" \
   -H "Content-Type: application/json" \
   -d '{
+    "email": "user@example.com",
+    "password": "securepassword123",
+    "full_name": "John Doe"
+  }'
+```
+
+2. **Login to get access token:**
+```bash
+curl -X POST "http://localhost:8000/auth/login" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "username=user@example.com&password=securepassword123"
+```
+
+**Response:**
+```json
+{
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "token_type": "bearer"
+}
+```
+
+3. **Use the token to access protected endpoints:**
+```bash
+# Send a chat message (requires authentication)
+curl -X POST "http://localhost:8000/chat" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -d '{
     "message": "How do I create a project?",
-    "session_id": "my-session-123",
-    "user_id": 1
+    "session_id": "my-session-123"
   }'
 ```
 
@@ -254,6 +283,12 @@ curl -X POST "http://localhost:8000/chat" \
   ],
   "current_stage": "welcome"
 }
+```
+
+4. **Get current user information:**
+```bash
+curl -X GET "http://localhost:8000/auth/me" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
 ```
 
 The interface will show:
@@ -349,6 +384,8 @@ The REST API is implemented using FastAPI and available at `http://localhost:800
 
 #### Endpoints
 
+**Public Endpoints:**
+
 **GET /** - Health check
 ```json
 {
@@ -370,14 +407,81 @@ The REST API is implemented using FastAPI and available at `http://localhost:800
 }
 ```
 
-**POST /chat** - Conversational AI endpoint
+**Authentication Endpoints:**
+
+**POST /auth/register** - Register a new user
+
+Request:
+```json
+{
+  "email": "user@example.com",
+  "password": "securepassword123",
+  "full_name": "John Doe"
+}
+```
+
+Response:
+```json
+{
+  "id": 1,
+  "email": "user@example.com",
+  "full_name": "John Doe",
+  "is_active": true,
+  "role": "user",
+  "created_at": "2024-01-25T12:00:00"
+}
+```
+
+**POST /auth/login** - Login and get access token
+
+Request (form-data):
+```
+username: user@example.com
+password: securepassword123
+```
+
+Response:
+```json
+{
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "token_type": "bearer"
+}
+```
+
+**GET /auth/me** - Get current user information (Protected)
+
+Headers:
+```
+Authorization: Bearer YOUR_ACCESS_TOKEN
+```
+
+Response:
+```json
+{
+  "id": 1,
+  "email": "user@example.com",
+  "full_name": "John Doe",
+  "is_active": true,
+  "role": "user",
+  "created_at": "2024-01-25T12:00:00"
+}
+```
+
+**Protected Endpoints:**
+
+**POST /chat** - Conversational AI endpoint (Requires Authentication)
+
+Headers:
+```
+Authorization: Bearer YOUR_ACCESS_TOKEN
+Content-Type: application/json
+```
 
 Request:
 ```json
 {
   "message": "How do I create a project?",
-  "session_id": "optional-session-id",
-  "user_id": 1
+  "session_id": "optional-session-id"
 }
 ```
 
@@ -398,6 +502,12 @@ Response:
 
 **Interactive Documentation:**
 Visit `http://localhost:8000/docs` for Swagger UI with interactive API testing.
+
+**Security Notes:**
+- Access tokens expire after 30 minutes (configurable)
+- Passwords are hashed using bcrypt
+- JWT tokens are signed with HS256 algorithm
+- All protected endpoints require valid authentication
 
 ### Database Schema
 
