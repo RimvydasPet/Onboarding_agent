@@ -126,7 +126,6 @@ if new_stage != st.session_state.current_stage:
     st.rerun()
 
 st.markdown('<div class="main-header">🤖 Onboarding Assistant</div>', unsafe_allow_html=True)
-st.markdown(f'<p style="text-align: center;"><span class="stage-badge">{next(s[1] for s in stages if s[0] == st.session_state.current_stage)}</span></p>', unsafe_allow_html=True)
 
 st.markdown("---")
 

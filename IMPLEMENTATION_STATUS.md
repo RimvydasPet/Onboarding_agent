@@ -117,10 +117,22 @@
 - Stage-specific system prompts
 - Error handling and user feedback
 
+### 9. REST API ✓
+- **FastAPI Application** (`api.py`):
+  - POST /chat endpoint for conversational AI
+  - Request/response models (APIChatRequest, APIChatResponse)
+  - CORS middleware for cross-origin requests
+  - Health check endpoints (/, /health)
+  - Automatic database initialization on startup
+  - UUID-based session management
+  - Integration with LangGraph agent workflow
+  - Comprehensive error handling and logging
+
 ## 📦 Current Project State
 
 The project is a **production-ready onboarding assistant** with:
 - ✅ Two chat interfaces (simple and advanced)
+- ✅ REST API with FastAPI
 - ✅ Full RAG system with document retrieval
 - ✅ LangGraph agentic workflow
 - ✅ ChromaDB vector database
@@ -141,6 +153,12 @@ streamlit run simple_chat_app.py
 ```bash
 streamlit run chat_app.py
 ```
+
+**REST API Server:**
+```bash
+uvicorn api:app --reload --port 8000
+```
+Then access the API at `http://localhost:8000` and interactive docs at `http://localhost:8000/docs`
 
 ## 🏗️ Architecture
 

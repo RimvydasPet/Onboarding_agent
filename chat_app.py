@@ -156,7 +156,6 @@ except:
 st.markdown('<div class="main-header">🤖 AI Onboarding Assistant</div>', unsafe_allow_html=True)
 st.markdown(
     f'<p style="text-align: center;">'
-    f'<span class="stage-badge">{next(s[1] for s in stages if s[0] == st.session_state.current_stage)}</span>'
     f'<span class="rag-badge">RAG Enabled</span>'
     f'</p>', 
     unsafe_allow_html=True

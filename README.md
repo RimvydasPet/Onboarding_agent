@@ -210,6 +210,52 @@ streamlit run chat_app.py
 
 Open your browser to `http://localhost:8501`
 
+#### Option 3: REST API Server
+
+```bash
+# Start the API server
+uvicorn api:app --reload --port 8000
+
+# Or use the convenience script
+chmod +x run_api.sh
+./run_api.sh
+```
+
+**Features:**
+- RESTful API for integration with other applications
+- POST /chat endpoint for conversational AI
+- Automatic session management
+- CORS enabled for web applications
+- Interactive API documentation at `http://localhost:8000/docs`
+
+**Example API Usage:**
+
+```bash
+# Send a chat message
+curl -X POST "http://localhost:8000/chat" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": "How do I create a project?",
+    "session_id": "my-session-123",
+    "user_id": 1
+  }'
+```
+
+**Response:**
+```json
+{
+  "response": "To create a project...",
+  "session_id": "my-session-123",
+  "sources": [
+    {
+      "content": "...",
+      "metadata": {"source": "projects_guide.md"}
+    }
+  ],
+  "current_stage": "welcome"
+}
+```
+
 The interface will show:
 - 💬 Interactive chat with the AI assistant
 - 🎯 Progress tracking through 5 onboarding stages
@@ -299,9 +345,34 @@ Configuration is loaded via `backend/config.py` using Pydantic Settings
 
 ### API Reference
 
-#### Agent Endpoints
+The REST API is implemented using FastAPI and available at `http://localhost:8000` when running `uvicorn api:app --reload --port 8000`.
 
-**POST /chat**
+#### Endpoints
+
+**GET /** - Health check
+```json
+{
+  "status": "healthy",
+  "service": "AI Onboarding Assistant API",
+  "version": "1.0.0"
+}
+```
+
+**GET /health** - Detailed health check
+```json
+{
+  "status": "healthy",
+  "components": {
+    "api": "operational",
+    "database": "operational",
+    "agent": "operational"
+  }
+}
+```
+
+**POST /chat** - Conversational AI endpoint
+
+Request:
 ```json
 {
   "message": "How do I create a project?",
@@ -315,10 +386,18 @@ Response:
 {
   "response": "To create a project...",
   "session_id": "session-123",
-  "sources": [...],
-  "current_stage": "first_steps"
+  "sources": [
+    {
+      "content": "Project creation guide...",
+      "metadata": {"source": "projects_guide.md", "stage": "first_steps"}
+    }
+  ],
+  "current_stage": "welcome"
 }
 ```
+
+**Interactive Documentation:**
+Visit `http://localhost:8000/docs` for Swagger UI with interactive API testing.
 
 ### Database Schema
 
@@ -424,10 +503,13 @@ Onboarding_agent/
 │   │   └── initializer.py       # RAG initialization
 │   ├── memory/          # Memory systems (short-term & long-term)
 │   ├── database/        # SQLAlchemy models & connection
-│   ├── models/          # Pydantic schemas
+│   ├── models/          # Pydantic schemas (including API models)
 │   └── config.py        # Configuration management
+├── api.py               # FastAPI REST API server ⭐
 ├── simple_chat_app.py   # Simple chat (no RAG)
-├── chat_app.py          # Advanced chat with RAG + Agent ⭐
+├── chat_app.py          # Advanced chat with RAG + Agent
+├── run_api.sh           # Convenience script to start API
+├── run_chat.sh          # Convenience script to start chat UI
 ├── requirements.txt     # Dependencies
 ├── README.md            # This file
 ├── .env.example         # Environment template
