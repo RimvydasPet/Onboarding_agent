@@ -44,32 +44,44 @@ def run_agent(user_input: str, user_id: int = 1, session_id: str = "default", cu
         current_stage: Current onboarding stage
     
     Returns:
-        Agent response
+        Agent response with sources
     """
     from langchain_core.messages import HumanMessage
     
-    agent = create_onboarding_agent()
+    app = create_onboarding_agent()
     
     initial_state = {
         "messages": [HumanMessage(content=user_input)],
+        "user_input": user_input,
         "user_id": user_id,
         "session_id": session_id,
         "current_stage": current_stage,
-        "user_context": {},
-        "retrieved_docs": [],
-        "next_action": "",
-        "should_retrieve": False,
-        "query_analysis": {}
+        "query_analysis": None,
+        "retrieved_documents": [],
+        "context_string": "",
+        "short_term_context": None,
+        "long_term_memories": [],
+        "response": "",
+        "sources": [],
+        "needs_retrieval": True,
+        "error": None
     }
     
-    result = agent.invoke(initial_state)
+    try:
+        result = app.invoke(initial_state)
+        
+        return {
+            "response": result.get("response", "I apologize, but I couldn't generate a response."),
+            "sources": result.get("sources", []),
+            "stage": current_stage,
+            "session_id": session_id
+        }
     
-    last_message = result["messages"][-1]
-    response = last_message.content if hasattr(last_message, 'content') else str(last_message)
-    
-    return {
-        "response": response,
-        "retrieved_docs": result.get("retrieved_docs", []),
-        "query_analysis": result.get("query_analysis", {}),
-        "current_stage": result.get("current_stage", current_stage)
-    }
+    except Exception as e:
+        logger.error(f"Error running agent: {e}")
+        return {
+            "response": f"I apologize, but I encountered an error: {str(e)}",
+            "sources": [],
+            "stage": current_stage,
+            "session_id": session_id
+        }

@@ -1,110 +1,125 @@
-from typing import List, Dict, Any, Optional
+from typing import Dict, Any, List
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import SystemMessage, HumanMessage
 from backend.config import settings
-import json
 import logging
+import json
 
 logger = logging.getLogger(__name__)
 
 
 class QueryPlanner:
+    """Analyze and plan queries for optimal retrieval."""
+    
     def __init__(self):
+        """Initialize the query planner with LLM."""
         self.llm = ChatGoogleGenerativeAI(
-            model="gemini-pro",
+            model="gemini-2.0-flash-exp",
             google_api_key=settings.GOOGLE_API_KEY,
-            temperature=0.1
+            temperature=0.3
         )
     
-    def analyze_query(self, query: str, context: Dict[str, Any] = None) -> Dict[str, Any]:
-        context = context or {}
+    def analyze_query(self, query: str, current_stage: str = "welcome") -> Dict[str, Any]:
+        """
+        Analyze a user query to determine retrieval strategy.
         
+        Args:
+            query: User's question
+            current_stage: Current onboarding stage
+            
+        Returns:
+            Dictionary with query analysis
+        """
         system_prompt = """You are a query analyzer for an onboarding assistant.
 Analyze the user's query and determine:
-1. Intent (question, request_help, navigate, feedback, other)
-2. Topic (account, features, getting_started, troubleshooting, other)
-3. Complexity (simple, moderate, complex)
-4. Requires_retrieval (true/false) - whether we need to search documentation
-5. Suggested_keywords - list of keywords to search for
+1. The intent (question, request_help, navigation, feedback, etc.)
+2. Whether document retrieval is needed
+3. Relevant categories (introduction, setup, projects, features, integrations, security, pricing, support, mobile, productivity)
+4. The onboarding stage relevance
 
-Respond in JSON format only."""
-
+Respond in JSON format:
+{
+    "intent": "question|request_help|navigation|feedback|greeting",
+    "needs_retrieval": true|false,
+    "categories": ["category1", "category2"],
+    "complexity": "simple|moderate|complex",
+    "suggested_k": 3-8
+}"""
+        
         user_prompt = f"""Query: {query}
+Current Stage: {current_stage}
 
-Context: {json.dumps(context, indent=2)}
-
-Analyze this query and respond with JSON."""
-
+Analyze this query."""
+        
         try:
-            response = self.llm.invoke([
+            messages = [
                 SystemMessage(content=system_prompt),
                 HumanMessage(content=user_prompt)
-            ])
+            ]
+            
+            response = self.llm.invoke(messages)
             
             content = response.content.strip()
             if content.startswith("```json"):
                 content = content[7:]
             if content.endswith("```"):
                 content = content[:-3]
+            content = content.strip()
             
-            analysis = json.loads(content.strip())
+            analysis = json.loads(content)
+            
             logger.info(f"Query analysis: {analysis}")
             return analysis
             
         except Exception as e:
-            logger.error(f"Query analysis failed: {e}")
+            logger.error(f"Error analyzing query: {e}")
             return {
                 "intent": "question",
-                "topic": "other",
+                "needs_retrieval": True,
+                "categories": [],
                 "complexity": "moderate",
-                "requires_retrieval": True,
-                "suggested_keywords": [query]
+                "suggested_k": 5
             }
     
-    def generate_search_queries(self, query: str, analysis: Dict[str, Any]) -> List[str]:
-        queries = [query]
+    def generate_search_queries(self, original_query: str, analysis: Dict[str, Any]) -> List[str]:
+        """
+        Generate multiple search queries for better retrieval.
         
-        if analysis.get("suggested_keywords"):
-            for keyword in analysis["suggested_keywords"][:3]:
-                if keyword.lower() not in query.lower():
-                    queries.append(f"{query} {keyword}")
+        Args:
+            original_query: Original user query
+            analysis: Query analysis from analyze_query
+            
+        Returns:
+            List of search queries
+        """
+        if analysis.get("complexity") == "simple":
+            return [original_query]
         
-        if analysis.get("topic") and analysis["topic"] != "other":
-            queries.append(f"{analysis['topic']}: {query}")
+        system_prompt = """Generate 2-3 alternative phrasings of the user's query to improve document retrieval.
+Make queries more specific and focused on key concepts.
+Return as JSON array: ["query1", "query2", "query3"]"""
         
-        return list(set(queries))[:3]
-    
-    def should_retrieve(self, query: str, analysis: Dict[str, Any]) -> bool:
-        if not analysis.get("requires_retrieval", True):
-            return False
-        
-        simple_greetings = ["hi", "hello", "hey", "thanks", "thank you", "bye"]
-        if query.lower().strip() in simple_greetings:
-            return False
-        
-        return True
-    
-    def plan_retrieval_strategy(self, analysis: Dict[str, Any]) -> Dict[str, Any]:
-        complexity = analysis.get("complexity", "moderate")
-        
-        if complexity == "simple":
-            strategy = {
-                "method": "similarity",
-                "k": 3,
-                "rerank": False
-            }
-        elif complexity == "complex":
-            strategy = {
-                "method": "mmr",
-                "k": 7,
-                "fetch_k": 20,
-                "rerank": True
-            }
-        else:
-            strategy = {
-                "method": "similarity",
-                "k": 5,
-                "rerank": True
-            }
-        
-        return strategy
+        try:
+            messages = [
+                SystemMessage(content=system_prompt),
+                HumanMessage(content=f"Original query: {original_query}")
+            ]
+            
+            response = self.llm.invoke(messages)
+            content = response.content.strip()
+            
+            if content.startswith("```json"):
+                content = content[7:]
+            if content.endswith("```"):
+                content = content[:-3]
+            content = content.strip()
+            
+            queries = json.loads(content)
+            
+            all_queries = [original_query] + queries
+            logger.info(f"Generated {len(all_queries)} search queries")
+            return all_queries
+            
+        except Exception as e:
+            logger.error(f"Error generating search queries: {e}")
+            return [original_query]

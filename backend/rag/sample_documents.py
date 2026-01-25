@@ -1,295 +1,385 @@
-"""Sample onboarding documents for the RAG system."""
-
-ONBOARDING_DOCUMENTS = [
-    {
-        "content": """Welcome to Our Platform!
-
-We're excited to have you here. This guide will help you get started with your account and explore all the features available to you.
-
-Getting started is easy:
-1. Complete your profile setup
-2. Explore the dashboard
-3. Connect with your team
-4. Start your first project
-
-If you need any help along the way, our support team is here for you 24/7.""",
-        "metadata": {
-            "source": "welcome_guide",
-            "category": "getting_started",
-            "topic": "welcome"
-        }
-    },
-    {
-        "content": """Account Setup Guide
-
-Creating your account is the first step to accessing all our features.
-
-Step 1: Verify Your Email
-Check your inbox for a verification email and click the link to activate your account.
-
-Step 2: Set Up Your Profile
-- Add your full name
-- Upload a profile picture
-- Set your timezone
-- Choose your notification preferences
-
-Step 3: Security Settings
-- Enable two-factor authentication (recommended)
-- Set up a strong password
-- Add recovery email
-
-Your account security is our top priority.""",
-        "metadata": {
-            "source": "account_setup",
-            "category": "getting_started",
-            "topic": "account"
-        }
-    },
-    {
-        "content": """Dashboard Overview
-
-Your dashboard is your central hub for all activities.
-
-Main Sections:
-- Overview: See your recent activity and important updates
-- Projects: Access and manage your projects
-- Team: Collaborate with team members
-- Analytics: View performance metrics
-- Settings: Customize your experience
-
-Quick Actions:
-You can quickly create new projects, invite team members, or access recent files from the dashboard toolbar.
-
-Customization:
-Drag and drop widgets to personalize your dashboard layout.""",
-        "metadata": {
-            "source": "dashboard_guide",
-            "category": "features",
-            "topic": "dashboard"
-        }
-    },
-    {
-        "content": """Creating Your First Project
-
-Projects help you organize your work and collaborate with others.
-
-To create a project:
-1. Click the "New Project" button in the dashboard
-2. Enter a project name and description
-3. Choose a template (optional)
-4. Invite team members
-5. Set project permissions
-6. Click "Create"
-
-Project Templates:
-- Marketing Campaign
-- Product Development
-- Event Planning
-- Custom (start from scratch)
-
-Best Practices:
-- Use clear, descriptive project names
-- Add detailed descriptions
-- Set realistic deadlines
-- Invite relevant team members from the start""",
-        "metadata": {
-            "source": "project_creation",
-            "category": "features",
-            "topic": "projects"
-        }
-    },
-    {
-        "content": """Team Collaboration Features
-
-Work together seamlessly with your team.
-
-Communication Tools:
-- Real-time chat
-- Video conferencing
-- Comments and mentions
-- Activity feeds
-
-File Sharing:
-Upload and share files up to 100MB. Supported formats include documents, images, videos, and more.
-
-Permissions:
-- Owner: Full control
-- Admin: Manage members and settings
-- Member: View and edit
-- Guest: View only
-
-Notifications:
-Stay updated with customizable notifications for mentions, comments, and project updates.""",
-        "metadata": {
-            "source": "collaboration_guide",
-            "category": "features",
-            "topic": "collaboration"
-        }
-    },
-    {
-        "content": """Troubleshooting Common Issues
-
-Can't log in?
-- Check your email and password
-- Try resetting your password
-- Clear your browser cache
-- Disable browser extensions
-
-Email not verified?
-- Check your spam folder
-- Request a new verification email
-- Contact support if issues persist
-
-Performance issues?
-- Clear browser cache
-- Try a different browser
-- Check your internet connection
-- Disable unnecessary browser extensions
-
-Still having problems?
-Contact our support team at support@platform.com or use the in-app chat.""",
-        "metadata": {
-            "source": "troubleshooting",
-            "category": "support",
-            "topic": "troubleshooting"
-        }
-    },
-    {
-        "content": """Privacy and Security
-
-We take your privacy seriously.
-
-Data Protection:
-- All data is encrypted in transit and at rest
-- Regular security audits
-- GDPR and CCPA compliant
-- No data sharing with third parties without consent
-
-Your Rights:
-- Access your data anytime
-- Request data deletion
-- Export your data
-- Control privacy settings
-
-Security Features:
-- Two-factor authentication
-- Session management
-- Login activity monitoring
-- Automatic logout after inactivity
-
-For more information, review our Privacy Policy and Terms of Service.""",
-        "metadata": {
-            "source": "privacy_security",
-            "category": "legal",
-            "topic": "security"
-        }
-    },
-    {
-        "content": """Mobile App Guide
-
-Access your account on the go with our mobile app.
-
-Available on:
-- iOS (iPhone and iPad)
-- Android
-
-Key Features:
-- Full dashboard access
-- Push notifications
-- Offline mode
-- File upload from camera
-- Quick actions
-
-Download:
-Search for "Our Platform" in the App Store or Google Play Store.
-
-Syncing:
-All changes sync automatically across devices. Work on mobile and continue on desktop seamlessly.
-
-Mobile-Specific Tips:
-- Enable push notifications for important updates
-- Use offline mode when traveling
-- Take advantage of camera integration for quick uploads""",
-        "metadata": {
-            "source": "mobile_app",
-            "category": "features",
-            "topic": "mobile"
-        }
-    },
-    {
-        "content": """Keyboard Shortcuts
-
-Work faster with keyboard shortcuts.
-
-Navigation:
-- Ctrl/Cmd + K: Quick search
-- Ctrl/Cmd + /: Show shortcuts
-- Ctrl/Cmd + H: Go to home
-
-Projects:
-- Ctrl/Cmd + N: New project
-- Ctrl/Cmd + E: Edit project
-- Ctrl/Cmd + D: Duplicate project
-
-General:
-- Ctrl/Cmd + S: Save
-- Ctrl/Cmd + Z: Undo
-- Ctrl/Cmd + Shift + Z: Redo
-- Esc: Close modal
-
-Customize:
-You can customize shortcuts in Settings > Keyboard Shortcuts.""",
-        "metadata": {
-            "source": "keyboard_shortcuts",
-            "category": "features",
-            "topic": "productivity"
-        }
-    },
-    {
-        "content": """Billing and Subscriptions
-
-Manage your subscription and billing.
-
-Plans:
-- Free: Basic features for individuals
-- Pro: Advanced features for professionals ($9.99/month)
-- Team: Collaboration tools for teams ($29.99/month)
-- Enterprise: Custom solutions (contact sales)
-
-Payment Methods:
-- Credit/Debit cards
-- PayPal
-- Bank transfer (Enterprise only)
-
-Billing Cycle:
-- Monthly or annual billing
-- Annual plans save 20%
-- Cancel anytime, no penalties
-
-Invoices:
-Access all invoices in Settings > Billing. Download as PDF for your records.
-
-Upgrades:
-Upgrade or downgrade your plan anytime. Changes take effect immediately.""",
-        "metadata": {
-            "source": "billing_guide",
-            "category": "account",
-            "topic": "billing"
-        }
-    }
-]
+from typing import List
+from langchain_core.documents import Document
 
 
-def get_sample_documents():
-    """Return sample onboarding documents."""
-    return ONBOARDING_DOCUMENTS
-
-
-def get_documents_by_category(category: str):
-    """Get documents filtered by category."""
-    return [doc for doc in ONBOARDING_DOCUMENTS if doc["metadata"]["category"] == category]
-
-
-def get_documents_by_topic(topic: str):
-    """Get documents filtered by topic."""
-    return [doc for doc in ONBOARDING_DOCUMENTS if doc["metadata"]["topic"] == topic]
+def get_sample_documents() -> List[Document]:
+    """
+    Get sample onboarding documents for the knowledge base.
+    
+    Returns:
+        List of Document objects with onboarding content
+    """
+    documents = [
+        Document(
+            page_content="""
+            Welcome to TechVenture Solutions!
+            
+            We're excited to have you join our platform. TechVenture Solutions is a comprehensive 
+            project management and collaboration platform designed to help teams work more efficiently.
+            
+            Our mission is to empower teams to achieve their goals through innovative technology 
+            and seamless collaboration tools. Whether you're managing a small team or a large 
+            enterprise, we have the features you need to succeed.
+            
+            Key benefits of TechVenture Solutions:
+            - Real-time collaboration across teams
+            - Advanced project tracking and analytics
+            - Secure cloud storage with 99.9% uptime
+            - Integration with 100+ popular tools
+            - 24/7 customer support
+            """,
+            metadata={
+                "source": "welcome_guide",
+                "category": "introduction",
+                "stage": "welcome"
+            }
+        ),
+        Document(
+            page_content="""
+            Getting Started with Your Account
+            
+            Step 1: Complete Your Profile
+            - Add your full name and profile picture
+            - Set your job title and department
+            - Configure your notification preferences
+            - Choose your timezone
+            
+            Step 2: Verify Your Email
+            - Check your inbox for a verification email
+            - Click the verification link
+            - Your account will be fully activated
+            
+            Step 3: Set Up Two-Factor Authentication (Recommended)
+            - Go to Settings > Security
+            - Enable 2FA using your preferred method (SMS or authenticator app)
+            - Save your backup codes in a secure location
+            
+            Step 4: Customize Your Dashboard
+            - Choose your preferred layout
+            - Add widgets for quick access to important features
+            - Set up your personal workspace
+            """,
+            metadata={
+                "source": "account_setup_guide",
+                "category": "setup",
+                "stage": "profile_setup"
+            }
+        ),
+        Document(
+            page_content="""
+            Creating Your First Project
+            
+            Projects are the foundation of TechVenture Solutions. Here's how to create one:
+            
+            1. Click the "New Project" button in the top navigation
+            2. Enter your project name and description
+            3. Choose a project template (Agile, Waterfall, or Custom)
+            4. Invite team members by email
+            5. Set project milestones and deadlines
+            6. Configure project permissions and visibility
+            
+            Project Templates:
+            - Agile: Perfect for software development with sprints and backlogs
+            - Waterfall: Traditional project management with sequential phases
+            - Custom: Build your own workflow from scratch
+            
+            Best Practices:
+            - Start with a clear project goal
+            - Break down work into manageable tasks
+            - Assign clear ownership for each task
+            - Set realistic deadlines
+            - Review progress regularly
+            """,
+            metadata={
+                "source": "project_guide",
+                "category": "projects",
+                "stage": "first_steps"
+            }
+        ),
+        Document(
+            page_content="""
+            Collaboration Features
+            
+            Real-Time Chat:
+            - Direct messages with team members
+            - Group channels for projects and teams
+            - File sharing in conversations
+            - Video and voice calls
+            - Screen sharing capabilities
+            
+            Document Collaboration:
+            - Simultaneous editing with multiple users
+            - Version history and rollback
+            - Comments and suggestions
+            - @mentions to notify team members
+            - Export to PDF, Word, or Google Docs
+            
+            Task Management:
+            - Create and assign tasks
+            - Set priorities and due dates
+            - Track task progress with status updates
+            - Add subtasks and checklists
+            - Attach files and links to tasks
+            
+            Calendar Integration:
+            - Sync with Google Calendar, Outlook, or Apple Calendar
+            - Schedule meetings and events
+            - Set reminders and notifications
+            - View team availability
+            """,
+            metadata={
+                "source": "collaboration_guide",
+                "category": "features",
+                "stage": "first_steps"
+            }
+        ),
+        Document(
+            page_content="""
+            Integrations and Extensions
+            
+            TechVenture Solutions integrates with over 100 popular tools:
+            
+            Development Tools:
+            - GitHub, GitLab, Bitbucket
+            - Jira, Linear, Asana
+            - Jenkins, CircleCI, Travis CI
+            
+            Communication:
+            - Slack, Microsoft Teams
+            - Zoom, Google Meet
+            - Discord, Telegram
+            
+            Cloud Storage:
+            - Google Drive, Dropbox
+            - OneDrive, Box
+            - AWS S3, Azure Blob Storage
+            
+            Analytics:
+            - Google Analytics
+            - Mixpanel, Amplitude
+            - Tableau, Power BI
+            
+            How to Add Integrations:
+            1. Go to Settings > Integrations
+            2. Browse available integrations
+            3. Click "Connect" on your desired integration
+            4. Authorize access
+            5. Configure integration settings
+            
+            Custom Integrations:
+            - Use our REST API for custom integrations
+            - Webhooks for real-time events
+            - OAuth 2.0 authentication
+            - Comprehensive API documentation available
+            """,
+            metadata={
+                "source": "integrations_guide",
+                "category": "integrations",
+                "stage": "learning_preferences"
+            }
+        ),
+        Document(
+            page_content="""
+            Security and Privacy
+            
+            Data Security:
+            - End-to-end encryption for all data
+            - SOC 2 Type II certified
+            - GDPR and CCPA compliant
+            - Regular security audits
+            - Penetration testing quarterly
+            
+            Access Control:
+            - Role-based access control (RBAC)
+            - Single Sign-On (SSO) support
+            - IP whitelisting
+            - Session management
+            - Audit logs for all activities
+            
+            Data Privacy:
+            - Your data is never shared with third parties
+            - Data residency options (US, EU, Asia)
+            - Right to data portability
+            - Right to deletion
+            - Transparent privacy policy
+            
+            Backup and Recovery:
+            - Automatic daily backups
+            - 30-day backup retention
+            - Point-in-time recovery
+            - Disaster recovery plan
+            - 99.9% uptime SLA
+            """,
+            metadata={
+                "source": "security_guide",
+                "category": "security",
+                "stage": "learning_preferences"
+            }
+        ),
+        Document(
+            page_content="""
+            Pricing and Plans
+            
+            Free Plan:
+            - Up to 5 team members
+            - 3 projects
+            - 5GB storage
+            - Basic features
+            - Community support
+            
+            Pro Plan ($15/user/month):
+            - Unlimited team members
+            - Unlimited projects
+            - 100GB storage per user
+            - Advanced features
+            - Priority email support
+            - Custom integrations
+            
+            Enterprise Plan (Custom pricing):
+            - Everything in Pro
+            - Unlimited storage
+            - Dedicated account manager
+            - 24/7 phone support
+            - Custom SLA
+            - On-premise deployment option
+            - Advanced security features
+            - Custom training sessions
+            
+            Billing:
+            - Monthly or annual billing
+            - Annual plans get 20% discount
+            - Cancel anytime, no long-term contracts
+            - Prorated refunds available
+            - Multiple payment methods accepted
+            """,
+            metadata={
+                "source": "pricing_guide",
+                "category": "pricing",
+                "stage": "welcome"
+            }
+        ),
+        Document(
+            page_content="""
+            Support and Resources
+            
+            Getting Help:
+            - Help Center: Comprehensive articles and guides
+            - Video Tutorials: Step-by-step video walkthroughs
+            - Community Forum: Connect with other users
+            - Live Chat: Available 9 AM - 5 PM EST
+            - Email Support: support@techventure.com
+            - Phone Support: Enterprise customers only
+            
+            Training Resources:
+            - Weekly webinars on new features
+            - On-demand training courses
+            - Certification program
+            - Best practices guides
+            - Case studies and success stories
+            
+            Developer Resources:
+            - API Documentation
+            - SDK libraries (Python, JavaScript, Ruby)
+            - Code examples and tutorials
+            - Developer community
+            - Sandbox environment for testing
+            
+            Status and Updates:
+            - System status page: status.techventure.com
+            - Planned maintenance notifications
+            - Feature release notes
+            - Product roadmap
+            - Monthly newsletter
+            """,
+            metadata={
+                "source": "support_guide",
+                "category": "support",
+                "stage": "completed"
+            }
+        ),
+        Document(
+            page_content="""
+            Mobile Apps
+            
+            TechVenture Solutions is available on iOS and Android:
+            
+            iOS App Features:
+            - Native iOS design
+            - Face ID / Touch ID support
+            - Offline mode
+            - Push notifications
+            - Widget support
+            - Apple Watch companion app
+            
+            Android App Features:
+            - Material Design
+            - Fingerprint authentication
+            - Offline mode
+            - Push notifications
+            - Home screen widgets
+            - Android Wear support
+            
+            Mobile-Specific Features:
+            - Quick actions from notifications
+            - Voice commands
+            - Camera integration for document scanning
+            - Location-based reminders
+            - Dark mode support
+            
+            Download:
+            - iOS: Available on the App Store
+            - Android: Available on Google Play
+            - Minimum requirements: iOS 14+ or Android 8+
+            """,
+            metadata={
+                "source": "mobile_guide",
+                "category": "mobile",
+                "stage": "first_steps"
+            }
+        ),
+        Document(
+            page_content="""
+            Keyboard Shortcuts
+            
+            Navigation:
+            - Ctrl/Cmd + K: Quick search
+            - Ctrl/Cmd + /: Show all shortcuts
+            - Ctrl/Cmd + B: Toggle sidebar
+            - Ctrl/Cmd + .: Open settings
+            
+            Project Management:
+            - N: Create new task
+            - Ctrl/Cmd + N: Create new project
+            - E: Edit selected item
+            - Del: Delete selected item
+            - Ctrl/Cmd + Enter: Save changes
+            
+            Communication:
+            - Ctrl/Cmd + M: New message
+            - Ctrl/Cmd + Shift + M: New group chat
+            - Ctrl/Cmd + F: Search in conversation
+            - Esc: Close current dialog
+            
+            Formatting:
+            - Ctrl/Cmd + B: Bold
+            - Ctrl/Cmd + I: Italic
+            - Ctrl/Cmd + U: Underline
+            - Ctrl/Cmd + Shift + X: Strikethrough
+            - Ctrl/Cmd + K: Insert link
+            
+            Productivity:
+            - Ctrl/Cmd + Z: Undo
+            - Ctrl/Cmd + Shift + Z: Redo
+            - Ctrl/Cmd + C: Copy
+            - Ctrl/Cmd + V: Paste
+            - Ctrl/Cmd + A: Select all
+            """,
+            metadata={
+                "source": "shortcuts_guide",
+                "category": "productivity",
+                "stage": "completed"
+            }
+        )
+    ]
+    
+    return documents

@@ -64,7 +64,7 @@ def initialize_system():
 @st.cache_resource
 def get_llm():
     return ChatGoogleGenerativeAI(
-        model="gemini-pro",
+        model="gemini-2.0-flash-exp",
         google_api_key=settings.GOOGLE_API_KEY,
         temperature=0.7
     )
@@ -126,7 +126,6 @@ if new_stage != st.session_state.current_stage:
     st.rerun()
 
 st.markdown('<div class="main-header">🤖 Onboarding Assistant</div>', unsafe_allow_html=True)
-st.markdown(f'<p style="text-align: center;"><span class="stage-badge">{next(s[1] for s in stages if s[0] == st.session_state.current_stage)}</span></p>', unsafe_allow_html=True)
 
 st.markdown("---")
 
@@ -209,16 +208,17 @@ Provide helpful, concise answers. Be encouraging and supportive."""
 
 if len(st.session_state.messages) == 0:
     st.markdown("""
-    <div style="text-align: center; padding: 3rem; color: #666;">
-        <h3>👋 Welcome! I'm your onboarding assistant.</h3>
-        <p>I'm here to help you get started with our platform.</p>
-        <p>Try asking me:</p>
-        <ul style="list-style: none; padding: 0;">
-            <li>• "How do I create a new project?"</li>
-            <li>• "What features are available?"</li>
-            <li>• "Tell me about getting started"</li>
-            <li>• "I need help with my account"</li>
-        </ul>
+    <div style="text-align: center; padding: 2rem;">
+        <h2>👋 Welcome to TechVenture Solutions!</h2>
+        <p style="font-size: 1.2rem; font-style: italic; color: #667eea; margin: 1.5rem 0;">
+            "Success is not final, failure is not fatal: it is the courage to continue that counts." - Winston Churchill
+        </p>
+        <p style="font-size: 1rem; color: #666; margin: 1.5rem 0;">
+            At TechVenture Solutions, we're committed to making your onboarding experience smooth and engaging.
+        </p>
+        <p style="font-size: 1rem; color: #667eea; font-weight: bold; margin-top: 1.5rem;">
+            📖 Please read this welcome message, then type below to begin your journey with us!
+        </p>
     </div>
     """, unsafe_allow_html=True)
 

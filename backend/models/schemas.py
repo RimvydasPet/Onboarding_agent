@@ -88,3 +88,17 @@ class AgentState(BaseModel):
     context: Dict[str, Any] = Field(default_factory=dict)
     retrieved_docs: List[Dict[str, Any]] = Field(default_factory=list)
     next_action: Optional[str] = None
+
+
+class APIChatRequest(BaseModel):
+    """Request model for POST /chat endpoint"""
+    message: str
+    session_id: Optional[str] = None
+
+
+class APIChatResponse(BaseModel):
+    """Response model for POST /chat endpoint"""
+    response: str
+    session_id: str
+    sources: List[Dict[str, Any]] = Field(default_factory=list)
+    current_stage: str
