@@ -6,10 +6,29 @@ An intelligent onboarding assistant powered by Google Gemini AI with dual-layer 
 
 - [Agent Purpose](#agent-purpose)
 - [Features](#features)
+- [Architecture](#architecture)
 - [Installation](#installation)
 - [Usage](#usage)
+- [Technical Implementation](#technical-implementation)
+- [Documentation](#documentation)
+- [Testing](#testing)
 - [Project Structure](#project-structure)
-- [Configuration](#configuration)
+- [Contributing](#contributing)
+
+---
+
+## 🎯 Quick Overview
+
+This project is a **production-ready AI onboarding assistant** featuring:
+
+- 🤖 **Google Gemini 2.0 Flash** - Advanced LLM for natural conversations
+- 🔐 **JWT Authentication** - Secure user registration and login
+- 🧠 **Dual-Layer Memory** - Redis (short-term) + SQL (long-term)
+- 📚 **RAG System** - ChromaDB vector store with 10 onboarding documents
+- 🔄 **LangGraph Agent** - 5-node agentic workflow for intelligent responses
+- 🎨 **Two UIs** - Simple chat + Advanced chat with RAG
+- 🚀 **REST API** - FastAPI with protected endpoints
+- 📊 **Stage-Based Flow** - 5 onboarding stages with progress tracking
 
 ---
 
@@ -115,13 +134,35 @@ The AI Onboarding Assistant is a conversational AI agent designed to guide new u
 
 ### Technology Stack
 
-- **Google Gemini 2.0 Flash**: LLM for conversational responses
-- **Streamlit**: Interactive web interface
-- **SQLAlchemy**: ORM for persistent storage
-- **Redis**: In-memory cache for session data (with in-memory fallback)
-- **Pydantic**: Data validation and settings management
-- **LangChain**: Framework for LLM integration
-- **Python 3.11+**: Core programming language
+**AI & LLM:**
+- **Google Gemini 2.0 Flash** - Advanced LLM for conversational responses
+- **LangChain** - Framework for LLM integration and chains
+- **LangGraph** - Agentic workflow orchestration
+
+**Vector Store & Embeddings:**
+- **ChromaDB** - Vector database for semantic search
+- **Sentence Transformers** - HuggingFace embeddings (all-MiniLM-L6-v2)
+
+**Backend & API:**
+- **FastAPI** - Modern REST API framework
+- **Uvicorn** - ASGI server
+- **SQLAlchemy** - ORM for persistent storage
+- **Redis** - In-memory cache for session data (with in-memory fallback)
+
+**Authentication & Security:**
+- **python-jose** - JWT token handling
+- **passlib** - Password hashing with bcrypt
+- **python-multipart** - Form data parsing
+
+**Frontend:**
+- **Streamlit** - Interactive web interface (2 versions)
+
+**Configuration & Validation:**
+- **Pydantic** - Data validation and settings management
+- **python-dotenv** - Environment variable management
+
+**Core:**
+- **Python 3.11+** - Core programming language
 
 ---
 
@@ -366,13 +407,31 @@ memories = long_term_memory.get_important_memories(user_id, min_importance=3)
 Settings are managed through `.env` file:
 
 ```env
-GOOGLE_API_KEY=your_api_key_here
+# Required - Get from https://aistudio.google.com/app/apikey
+GOOGLE_API_KEY=your_google_api_key_here
+
+# Database (SQLite by default)
 DATABASE_URL=sqlite:///./onboarding.db
+
+# Redis (optional - falls back to in-memory if unavailable)
 REDIS_URL=redis://localhost:6379/0
-SECRET_KEY=your-secret-key
+
+# Authentication (Required for API)
+SECRET_KEY=your-secret-key-change-in-production
+ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=30
 ```
 
-Configuration is loaded via `backend/config.py` using Pydantic Settings
+**Configuration Details:**
+
+- **GOOGLE_API_KEY**: Required for Gemini AI. Get yours at https://aistudio.google.com/app/apikey
+- **DATABASE_URL**: SQLite database path (auto-created on first run)
+- **REDIS_URL**: Redis connection URL (optional, uses in-memory fallback if unavailable)
+- **SECRET_KEY**: JWT signing key (generate with `python -c "import secrets; print(secrets.token_urlsafe(32))"`)
+- **ALGORITHM**: JWT algorithm (HS256 recommended)
+- **ACCESS_TOKEN_EXPIRE_MINUTES**: Token validity duration (default: 30 minutes)
+
+Configuration is loaded via `backend/config.py` using Pydantic Settings with automatic validation.
 
 ---
 
@@ -580,17 +639,66 @@ Visit `http://localhost:8000/docs` for Swagger UI with interactive API testing.
 
 ## 🧪 Testing
 
+### Automated Tests
+
+The project includes several test scripts to verify functionality:
+
+**1. Authentication System Tests**
+```bash
+python test_auth.py
+```
+Tests user registration, login, token validation, and protected endpoints.
+
+**2. API Endpoint Tests**
+```bash
+python test_api.py
+```
+Tests the REST API endpoints including chat functionality.
+
+**3. cURL-based API Tests**
+```bash
+chmod +x test_api_curl.sh
+./test_api_curl.sh
+```
+Shell script with cURL commands for API testing.
+
+**4. Memory Fallback Tests**
+```bash
+python test_memory_fallback.py
+```
+Tests the memory system's fallback mechanism when Redis is unavailable.
+
 ### Manual Testing
 
-1. Start chat interface: `streamlit run simple_chat_app.py`
+**Streamlit Chat Interface:**
+1. Start chat interface: `streamlit run simple_chat_app.py` or `streamlit run chat_app.py`
 2. Try these queries:
    - "How do I create a new project?"
    - "What features are available?"
    - "Tell me about getting started"
    - "I need help with my account"
+   - "What integrations are available?"
 3. Test stage progression by changing stages in the sidebar
 4. Verify memory by asking follow-up questions
 5. Check session management with "New Session" button
+6. View sources in the advanced chat app
+
+**REST API Testing:**
+1. Start API server: `uvicorn api:app --reload --port 8000`
+2. Visit interactive docs: `http://localhost:8000/docs`
+3. Test authentication flow:
+   - Register a new user
+   - Login to get access token
+   - Use token to access protected endpoints
+4. Test chat endpoint with various queries
+
+### Utility Scripts
+
+**Clear Memory Storage**
+```bash
+python clear_memories.py
+```
+Clears all stored memories (useful for testing fresh starts).
 
 ---
 
@@ -600,30 +708,58 @@ Visit `http://localhost:8000/docs` for Swagger UI with interactive API testing.
 Onboarding_agent/
 ├── backend/
 │   ├── agent/           # LangGraph agentic workflow
+│   │   ├── __init__.py
 │   │   ├── state.py     # Agent state definition
-│   │   ├── nodes.py     # Agent nodes (analyze, retrieve, respond)
-│   │   └── graph.py     # LangGraph workflow
+│   │   ├── nodes.py     # Agent nodes (analyze, load memory, retrieve, respond, save)
+│   │   └── graph.py     # LangGraph workflow orchestration
+│   ├── auth/            # Authentication system
+│   │   ├── __init__.py
+│   │   ├── utils.py     # JWT & password hashing utilities
+│   │   ├── dependencies.py  # FastAPI auth dependencies
+│   │   └── service.py   # Authentication service layer
 │   ├── rag/             # RAG system components
+│   │   ├── __init__.py
 │   │   ├── vector_store.py      # ChromaDB integration
-│   │   ├── document_processor.py # Text chunking
-│   │   ├── query_planner.py     # Query analysis
+│   │   ├── document_processor.py # Text chunking & processing
+│   │   ├── query_planner.py     # Query analysis & planning
 │   │   ├── reranker.py          # Result reranking
 │   │   ├── agentic_rag.py       # Main RAG engine
-│   │   ├── sample_documents.py  # Knowledge base
+│   │   ├── sample_documents.py  # Knowledge base (10 documents)
 │   │   └── initializer.py       # RAG initialization
-│   ├── memory/          # Memory systems (short-term & long-term)
-│   ├── database/        # SQLAlchemy models & connection
-│   ├── models/          # Pydantic schemas (including API models)
-│   └── config.py        # Configuration management
-├── api.py               # FastAPI REST API server ⭐
-├── simple_chat_app.py   # Simple chat (no RAG)
-├── chat_app.py          # Advanced chat with RAG + Agent
+│   ├── memory/          # Dual-layer memory system
+│   │   ├── __init__.py
+│   │   ├── short_term.py    # Redis/in-memory session storage
+│   │   └── long_term.py     # SQL persistent storage
+│   ├── database/        # Database layer
+│   │   ├── __init__.py
+│   │   ├── connection.py    # SQLAlchemy connection & session
+│   │   └── models.py        # Database models (6 tables)
+│   ├── models/          # Data models
+│   │   ├── __init__.py
+│   │   └── schemas.py       # Pydantic schemas (API & domain models)
+│   ├── __init__.py
+│   └── config.py        # Configuration management (Pydantic Settings)
+├── venv311/             # Python virtual environment
+├── api.py               # FastAPI REST API server with authentication ⭐
+├── simple_chat_app.py   # Simple Streamlit chat (no RAG)
+├── chat_app.py          # Advanced Streamlit chat with RAG + Agent
 ├── run_api.sh           # Convenience script to start API
 ├── run_chat.sh          # Convenience script to start chat UI
-├── requirements.txt     # Dependencies
-├── README.md            # This file
+├── test_auth.py         # Authentication system tests
+├── test_api.py          # API endpoint tests
+├── test_api_curl.sh     # cURL-based API tests
+├── test_memory_fallback.py  # Memory fallback tests
+├── clear_memories.py    # Utility to clear memory storage
+├── requirements.txt     # Python dependencies
+├── onboarding.db        # SQLite database (auto-created)
+├── README.md            # This file - comprehensive documentation
+├── AUTHENTICATION_GUIDE.md      # Detailed authentication guide
+├── AUTHENTICATION_SUMMARY.md    # Auth implementation summary
+├── IMPLEMENTATION_STATUS.md     # Current project status
+├── FALLBACK_IMPROVEMENTS.md     # Memory fallback documentation
 ├── .env.example         # Environment template
-└── .env                 # Your configuration (gitignored)
+├── .env                 # Your configuration (gitignored)
+└── .gitignore           # Git ignore patterns
 ```
 
 ---

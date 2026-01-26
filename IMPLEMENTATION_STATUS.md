@@ -178,41 +178,88 @@ Then access the API at `http://localhost:8000` and interactive docs at `http://l
 ## 🏗️ Architecture
 
 ```
-User Authentication (JWT)
-    ↓
-User Query (Protected)
-    ↓
-LangGraph Agent
-    ↓
-┌─────────────┬──────────────┬─────────────────┐
-│ Analyze     │ Load Memory  │ Retrieve Docs   │
-│ Input       │ (Redis+SQL)  │ (ChromaDB)      │
-└─────────────┴──────────────┴─────────────────┘
-    ↓
-Generate Response (Gemini 2.0 + Context)
-    ↓
-Save to Memory
-    ↓
-Return Response + Sources
+┌─────────────────────────────────────────────────────────────┐
+│                    User Registration/Login                   │
+│                  (JWT Token Authentication)                  │
+└────────────────────────┬────────────────────────────────────┘
+                         │
+                         ▼
+┌─────────────────────────────────────────────────────────────┐
+│              Protected API Endpoint (POST /chat)             │
+│            Authorization: Bearer <access_token>              │
+└────────────────────────┬────────────────────────────────────┘
+                         │
+                         ▼
+┌─────────────────────────────────────────────────────────────┐
+│                   LangGraph Agent Workflow                   │
+│                  (5-Node Sequential Pipeline)                │
+└────────────────────────┬────────────────────────────────────┘
+                         │
+         ┌───────────────┼───────────────┬──────────────────┐
+         ▼               ▼               ▼                  ▼
+┌─────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐
+│  Analyze    │ │ Load Memory  │ │  Retrieve    │ │  Generate    │
+│  Input      │ │ (Redis+SQL)  │ │  Context     │ │  Response    │
+│             │ │              │ │  (ChromaDB)  │ │  (Gemini)    │
+└─────────────┘ └──────────────┘ └──────────────┘ └──────────────┘
+         │               │               │                  │
+         └───────────────┴───────────────┴──────────────────┘
+                         │
+                         ▼
+                 ┌──────────────┐
+                 │ Save Memory  │
+                 │ (Redis+SQL)  │
+                 └──────────────┘
+                         │
+                         ▼
+┌─────────────────────────────────────────────────────────────┐
+│         Return Response + Sources + Current Stage            │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 ## 📝 Key Features
 
+**Authentication & Security:**
+- JWT-based authentication with bcrypt password hashing
+- Protected API endpoints requiring valid tokens
+- Token expiration (30 minutes, configurable)
+- Role-based access control support
+- Automatic user profile creation on registration
+
 **Agentic Behavior:**
-- Multi-step reasoning
+- Multi-step reasoning through LangGraph workflow
 - Query planning and optimization
 - Intelligent retrieval decisions
 - Context-aware responses
+- Memory integration (short-term + long-term)
 
 **RAG Capabilities:**
-- Semantic search over 10 onboarding documents
-- Multi-query retrieval
-- LLM-based reranking
-- Source attribution
+- Semantic search over 10 comprehensive onboarding documents
+- Multi-query retrieval for better coverage
+- LLM-based reranking for relevance
+- Source attribution and transparency
 - Metadata filtering by stage/category
+- ChromaDB vector store with HuggingFace embeddings
+
+**Memory Systems:**
+- Short-term: Redis with in-memory fallback (TTL-based)
+- Long-term: SQL-based persistent storage
+- Importance scoring (1-5 scale)
+- Access count tracking
+- Thread-safe operations
+
+**User Experience:**
+- Two Streamlit interfaces (simple + advanced)
+- REST API with FastAPI
+- Stage-based onboarding flow (5 stages)
+- Progress tracking and visualization
+- Session management with unique IDs
+- Beautiful purple gradient UI
 
 **Production Ready:**
-- Error handling and fallbacks
-- Logging throughout
+- Comprehensive error handling and fallbacks
+- Structured logging throughout
 - Configurable via environment variables
 - Scalable architecture
+- CORS support for web integration
+- Interactive API documentation (Swagger/ReDoc)

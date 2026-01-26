@@ -160,12 +160,15 @@ def _required_fields_for_stage(stage: str, facts: dict) -> list[str]:
 
 
 def _get_onboarding_facts(user_id: int) -> dict:
+    from backend.memory.long_term import LongTermMemory
     db = next(get_db())
-    profile = db.query(OnboardingProfileDB).filter(OnboardingProfileDB.user_id == user_id).first()
-    if not profile or not profile.progress:
-        return {}
-    facts = profile.progress.get("facts")
-    return facts if isinstance(facts, dict) else {}
+    ltm = LongTermMemory(db)
+    memories = ltm.get_memories_by_type(user_id, "onboarding")
+    facts = {}
+    for mem in memories:
+        if mem.get("key"):
+            facts[mem["key"]] = mem["value"]
+    return facts
 
 
 def _is_stage_complete(stage: str, facts: dict) -> bool:
@@ -229,67 +232,143 @@ def _generate_stage_summary_pdf(user_id: int, session_id: str, stage: str, answe
     return buffer.read()
 
 
-def _generate_structured_stage_pdf(user_id: int, session_id: str, stage: str, facts: dict) -> bytes:
+def _generate_comprehensive_onboarding_pdf(user_id: int, session_id: str, facts: dict) -> bytes:
+    """Generate a comprehensive PDF with all completed onboarding stages."""
+    from reportlab.lib import colors
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+    from reportlab.lib.units import inch
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT
+    
     buffer = BytesIO()
-    pdf = canvas.Canvas(buffer, pagesize=letter)
-    width, height = letter
-
-    stage_titles = {
-        "welcome": "Welcome",
-        "profile_setup": "Profile Setup",
-        "learning_preferences": "Learning Preferences",
-        "first_steps": "First Steps",
-        "completed": "Completed",
-    }
-    title = stage_titles.get(stage, stage)
-
-    left_margin = 50
-    y = height - 60
-
-    pdf.setFont("Helvetica-Bold", 16)
-    pdf.drawString(left_margin, y, "TechVenture Solutions — Onboarding Summary")
-    y -= 22
-
-    pdf.setFont("Helvetica-Bold", 13)
-    pdf.drawString(left_margin, y, f"Stage: {title}")
-    y -= 18
-
-    pdf.setFont("Helvetica", 10)
-    pdf.drawString(left_margin, y, f"User ID: {user_id}   Session: {session_id}")
-    y -= 14
-    pdf.drawString(left_margin, y, f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    y -= 22
-
-    pdf.setFont("Helvetica-Bold", 12)
-    pdf.drawString(left_margin, y, "Summary")
-    y -= 16
-
-    pdf.setFont("Helvetica", 11)
-    for field in _required_fields_for_stage(stage, facts):
-        key = f"{stage}.{field}"
-        value = facts.get(key, "")
-        label = field.replace("_", " ").title()
-        line = f"{label}: {value}".strip()
-        words = line.split()
-        current = ""
-        for w in words:
-            candidate = (current + " " + w).strip()
-            if pdf.stringWidth(candidate, "Helvetica", 11) > (width - left_margin * 2):
-                pdf.drawString(left_margin, y, current)
-                y -= 14
-                current = w
-            else:
-                current = candidate
-        if current:
-            pdf.drawString(left_margin, y, current)
-            y -= 16
-        if y < 80:
-            pdf.showPage()
-            pdf.setFont("Helvetica", 11)
-            y = height - 60
-
-    pdf.showPage()
-    pdf.save()
+    doc = SimpleDocTemplate(buffer, pagesize=letter, topMargin=0.5*inch, bottomMargin=0.5*inch)
+    story = []
+    styles = getSampleStyleSheet()
+    
+    # Custom styles
+    title_style = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Heading1'],
+        fontSize=24,
+        textColor=colors.HexColor('#667eea'),
+        spaceAfter=12,
+        alignment=TA_CENTER,
+        fontName='Helvetica-Bold'
+    )
+    
+    subtitle_style = ParagraphStyle(
+        'CustomSubtitle',
+        parent=styles['Normal'],
+        fontSize=12,
+        textColor=colors.HexColor('#666666'),
+        spaceAfter=20,
+        alignment=TA_CENTER
+    )
+    
+    stage_title_style = ParagraphStyle(
+        'StageTitle',
+        parent=styles['Heading2'],
+        fontSize=16,
+        textColor=colors.HexColor('#764ba2'),
+        spaceAfter=10,
+        spaceBefore=20,
+        fontName='Helvetica-Bold'
+    )
+    
+    field_style = ParagraphStyle(
+        'FieldStyle',
+        parent=styles['Normal'],
+        fontSize=11,
+        spaceAfter=8,
+        leftIndent=20
+    )
+    
+    # Header
+    story.append(Paragraph("🎯 TechVenture Solutions", title_style))
+    story.append(Paragraph("Onboarding Summary Report", subtitle_style))
+    
+    # Metadata table
+    user_name = facts.get('welcome.name', 'N/A')
+    user_role = facts.get('welcome.role', 'N/A')
+    
+    metadata = [
+        ['Participant:', user_name],
+        ['Role:', user_role],
+        ['Session ID:', session_id[:16] + '...'],
+        ['Generated:', datetime.now().strftime('%B %d, %Y at %I:%M %p')]
+    ]
+    
+    meta_table = Table(metadata, colWidths=[1.5*inch, 4*inch])
+    meta_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#f0f0f0')),
+        ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
+        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 10),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+        ('TOPPADDING', (0, 0), (-1, -1), 8),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey)
+    ]))
+    
+    story.append(meta_table)
+    story.append(Spacer(1, 0.3*inch))
+    
+    # Stage definitions
+    stage_info = [
+        ("welcome", "👋 Welcome", "Basic information and introduction"),
+        ("profile_setup", "👤 Profile Setup", "Personal profile and preferences"),
+        ("learning_preferences", "📚 Learning Preferences", "Work style and learning approach"),
+        ("first_steps", "🚀 First Steps", "Initial actions and setup")
+    ]
+    
+    # Process each stage
+    for stage_id, stage_title, stage_desc in stage_info:
+        required_fields = _required_fields_for_stage(stage_id, facts)
+        if not required_fields:
+            continue
+            
+        # Check if stage has any data
+        has_data = any(facts.get(f"{stage_id}.{field}") for field in required_fields)
+        if not has_data:
+            continue
+        
+        # Stage header
+        story.append(Paragraph(stage_title, stage_title_style))
+        story.append(Paragraph(f"<i>{stage_desc}</i>", subtitle_style))
+        
+        # Stage data
+        stage_data = []
+        for field in required_fields:
+            key = f"{stage_id}.{field}"
+            value = facts.get(key, "Not provided")
+            label = field.replace("_", " ").title()
+            stage_data.append([label, str(value)])
+        
+        if stage_data:
+            stage_table = Table(stage_data, colWidths=[2*inch, 4*inch])
+            stage_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#e0e7ff')),
+                ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
+                ('ALIGN', (0, 0), (0, -1), 'RIGHT'),
+                ('ALIGN', (1, 0), (1, -1), 'LEFT'),
+                ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, -1), 11),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 10),
+                ('TOPPADDING', (0, 0), (-1, -1), 10),
+                ('LEFTPADDING', (0, 0), (-1, -1), 12),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 12),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+                ('ROWBACKGROUNDS', (0, 0), (-1, -1), [colors.white, colors.HexColor('#f9fafb')])
+            ]))
+            story.append(stage_table)
+            story.append(Spacer(1, 0.2*inch))
+    
+    # Footer
+    story.append(Spacer(1, 0.3*inch))
+    footer_text = "<i>This document contains your onboarding information collected during your TechVenture Solutions onboarding process. Keep this for your records.</i>"
+    story.append(Paragraph(footer_text, subtitle_style))
+    
+    doc.build(story)
     buffer.seek(0)
     return buffer.read()
 
@@ -399,7 +478,7 @@ except:
     st.sidebar.warning("⚠️ RAG system initializing...")
 
 st.sidebar.markdown("---")
-st.sidebar.markdown("### 📄 Stage Summaries")
+st.sidebar.markdown("### 📄 Onboarding Summary")
 _sidebar_facts = _get_onboarding_facts(st.session_state.user_id)
 _completed_stages_for_download = [
     (stage_id, stage_name)
@@ -407,22 +486,22 @@ _completed_stages_for_download = [
     if stage_id != "completed" and _is_stage_complete(stage_id, _sidebar_facts)
 ]
 if _completed_stages_for_download:
-    for _dl_stage_id, _dl_stage_name in _completed_stages_for_download:
-        _dl_pdf = _generate_structured_stage_pdf(
-            user_id=st.session_state.user_id,
-            session_id=st.session_state.session_id,
-            stage=_dl_stage_id,
-            facts=_sidebar_facts,
-        )
-        st.sidebar.download_button(
-            label=f"📥 {_dl_stage_name}",
-            data=_dl_pdf,
-            file_name=f"onboarding_{_dl_stage_id}_{st.session_state.session_id[:8]}.pdf",
-            mime="application/pdf",
-            key=f"sidebar_dl_{_dl_stage_id}",
-        )
+    _comprehensive_pdf = _generate_comprehensive_onboarding_pdf(
+        user_id=st.session_state.user_id,
+        session_id=st.session_state.session_id,
+        facts=_sidebar_facts,
+    )
+    st.sidebar.download_button(
+        label="📥 Download Complete Summary",
+        data=_comprehensive_pdf,
+        file_name=f"onboarding_summary_{st.session_state.session_id[:8]}.pdf",
+        mime="application/pdf",
+        key="sidebar_comprehensive_dl",
+        use_container_width=True
+    )
+    st.sidebar.caption(f"✅ {len(_completed_stages_for_download)} stage(s) completed")
 else:
-    st.sidebar.info("Complete a stage to download its summary.")
+    st.sidebar.info("Complete a stage to download your summary.")
 
 st.markdown('<div class="main-header">🤖 AI Onboarding Assistant</div>', unsafe_allow_html=True)
 st.markdown(
@@ -484,40 +563,6 @@ for message in st.session_state.messages:
                     """, unsafe_allow_html=True)
 
 
-current_stage_answers = [
-    m["content"]
-    for m in st.session_state.messages
-    if m.get("stage") == st.session_state.current_stage and m.get("role") == "user"
-]
-facts = _get_onboarding_facts(st.session_state.user_id)
-if _is_stage_complete(st.session_state.current_stage, facts):
-    pdf_bytes = _generate_structured_stage_pdf(
-        user_id=st.session_state.user_id,
-        session_id=st.session_state.session_id,
-        stage=st.session_state.current_stage,
-        facts=facts,
-    )
-    st.download_button(
-        label="📄 Download stage summary (PDF)",
-        data=pdf_bytes,
-        file_name=f"onboarding_{st.session_state.current_stage}_{st.session_state.session_id[:8]}.pdf",
-        mime="application/pdf",
-    )
-
-    stage_ids = [s[0] for s in stages]
-    try:
-        idx = stage_ids.index(st.session_state.current_stage)
-    except ValueError:
-        idx = -1
-
-    next_stage_id = stage_ids[idx + 1] if idx >= 0 and idx + 1 < len(stage_ids) else None
-    if next_stage_id and next_stage_id != st.session_state.current_stage:
-        st.info("This stage is complete. When you're ready, move on to the next step.")
-        if st.button("➡️ Go to next step", key=f"go_next_{st.session_state.current_stage}"):
-            st.session_state.current_stage = next_stage_id
-            st.session_state.unlocked_stages.add(next_stage_id)
-            st.rerun()
-
 user_input = st.chat_input("Ask me anything about TechVenture Solutions...")
 
 if user_input:
@@ -546,10 +591,16 @@ if user_input:
                 history=recent_history,
             )
             
+            # Check if stage should change
+            next_stage = result.get("next_stage")
+            if next_stage and next_stage != st.session_state.current_stage:
+                st.session_state.current_stage = next_stage
+                st.session_state.unlocked_stages.add(next_stage)
+            
             st.session_state.messages.append({
                 "role": "assistant",
                 "content": result["response"],
-                "stage": previous_stage,
+                "stage": st.session_state.current_stage,
                 "sources": result.get("sources", []),
                 "timestamp": datetime.now().isoformat()
             })
@@ -582,38 +633,54 @@ if user_input:
     st.rerun()
 
 if len(st.session_state.messages) == 0:
-    with st.spinner("🤖 Your onboarding assistant is ready..."):
-        try:
-            result = run_agent(
-                user_input="I just arrived and I'm ready to start onboarding",
-                user_id=st.session_state.user_id,
-                session_id=st.session_state.session_id,
-                current_stage=st.session_state.current_stage
-            )
-            
-            st.session_state.messages.append({
-                "role": "assistant",
-                "content": result["response"],
-                "stage": st.session_state.current_stage,
-                "timestamp": datetime.now().isoformat()
-            })
-            st.rerun()
-        except Exception as e:
-            logger.error(f"Error generating welcome message: {e}")
-            st.markdown("""
-            <div style="text-align: center; padding: 2rem;">
-                <h2>👋 Welcome to TechVenture Solutions!</h2>
-                <p style="font-size: 1.2rem; font-style: italic; color: #667eea; margin: 1.5rem 0;">
-                    "Success is not final, failure is not fatal: it is the courage to continue that counts." - Winston Churchill
-                </p>
-                <p style="font-size: 1rem; color: #666; margin: 1.5rem 0;">
-                    I'm your AI onboarding assistant, here to help you get started with our platform.
-                </p>
-                <p style="font-size: 1rem; color: #667eea; font-weight: bold; margin-top: 1.5rem;">
-                    Type a message below to begin your journey with us!
-                </p>
-            </div>
-            """, unsafe_allow_html=True)
+    existing_facts = _get_onboarding_facts(st.session_state.user_id)
+    has_existing_progress = bool(existing_facts)
+    
+    if not has_existing_progress:
+        with st.spinner("🤖 Your onboarding assistant is ready..."):
+            try:
+                result = run_agent(
+                    user_input="I just arrived and I'm ready to start onboarding",
+                    user_id=st.session_state.user_id,
+                    session_id=st.session_state.session_id,
+                    current_stage=st.session_state.current_stage
+                )
+                
+                st.session_state.messages.append({
+                    "role": "assistant",
+                    "content": result["response"],
+                    "stage": st.session_state.current_stage,
+                    "timestamp": datetime.now().isoformat()
+                })
+                st.rerun()
+            except Exception as e:
+                logger.error(f"Error generating welcome message: {e}")
+                st.markdown("""
+                <div style="text-align: center; padding: 2rem;">
+                    <h2>👋 Welcome to TechVenture Solutions!</h2>
+                    <p style="font-size: 1.2rem; font-style: italic; color: #667eea; margin: 1.5rem 0;">
+                        "Success is not final, failure is not fatal: it is the courage to continue that counts." - Winston Churchill
+                    </p>
+                    <p style="font-size: 1rem; color: #666; margin: 1.5rem 0;">
+                        I'm your AI onboarding assistant, here to help you get started with our platform.
+                    </p>
+                    <p style="font-size: 1rem; color: #667eea; font-weight: bold; margin-top: 1.5rem;">
+                        Type a message below to begin your journey with us!
+                    </p>
+                </div>
+                """, unsafe_allow_html=True)
+    else:
+        st.markdown("""
+        <div style="text-align: center; padding: 2rem;">
+            <h2>👋 Welcome back!</h2>
+            <p style="font-size: 1rem; color: #666; margin: 1.5rem 0;">
+                I'm your AI onboarding assistant. You have existing progress saved.
+            </p>
+            <p style="font-size: 1rem; color: #667eea; font-weight: bold; margin-top: 1.5rem;">
+                Type a message below to continue your onboarding journey!
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
 
 st.markdown("---")
 col1, col2, col3, col4 = st.columns(4)
