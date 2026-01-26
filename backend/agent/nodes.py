@@ -416,16 +416,51 @@ class AgentNodes:
             kickoff = str(state.get("user_input") or "").strip().lower().startswith("i just arrived")
 
             if kickoff:
-                if current_question:
-                    state["response"] = current_question
+                stage_names = {
+                    "welcome": "Welcome",
+                    "profile_setup": "Profile Setup", 
+                    "learning_preferences": "Learning Preferences",
+                    "first_steps": "First Steps"
+                }
+                
+                completed_stages = []
+                first_missing = None
+                
+                for check_stage in ["welcome", "profile_setup", "learning_preferences", "first_steps"]:
+                    missing = self._missing_fields(check_stage, onboarding_facts)
+                    if not missing:
+                        completed_stages.append(stage_names[check_stage])
+                    elif not first_missing:
+                        first_missing = (check_stage, missing[0][0], missing[0][1])
+                
+                response_parts = []
+                
+                if completed_stages:
+                    response_parts.append(f"**Progress Summary:**\n✅ Completed: {', '.join(completed_stages)}")
+                    response_parts.append("")
+                
+                if first_missing:
+                    check_stage, field_key, question = first_missing
+                    
+                    if completed_stages:
+                        response_parts.append(f"**Next Step:** {stage_names[check_stage]}")
+                    
+                    if check_stage != current_stage:
+                        stage_intro = self._STAGE_INTRODUCTIONS.get(check_stage, "")
+                        if stage_intro:
+                            response_parts.append(stage_intro)
+                    
+                    if response_parts:
+                        response_parts.append("")
+                    response_parts.append(question)
+                    
+                    state["response"] = "\n".join(response_parts)
+                    state["next_stage"] = check_stage if check_stage != current_stage else None
                 else:
-                    # All fields complete for this stage - provide a welcome with company info
-                    state["response"] = (
-                        "Welcome back! Great to see you again. I see we've already collected your basic info. "
-                        "Feel free to ask me anything about TechVenture Solutions, or let me know if you'd like "
-                        "to continue to the next stage of onboarding."
-                    )
-                state["next_stage"] = None
+                    response_parts.append(self._STAGE_INTRODUCTIONS.get("completed", "Congratulations! You've completed onboarding."))
+                    state["response"] = "\n".join(response_parts)
+                    state["next_stage"] = "completed"
+                
                 state["extracted_facts"] = {}
                 state["onboarding_facts"] = onboarding_facts
                 return state
@@ -450,8 +485,26 @@ class AgentNodes:
 
                     remaining = self._missing_fields(current_stage, onboarding_facts)
                     if len(remaining) == 0:
-                        state["next_stage"] = None
-                        state["response"] = "Got it."
+                        # Current stage complete - move to next stage
+                        next_stage = self._next_stage_for(current_stage)
+                        if next_stage and next_stage != "completed":
+                            state["next_stage"] = next_stage
+                            # Get first question of next stage
+                            next_stage_missing = self._missing_fields(next_stage, onboarding_facts)
+                            if next_stage_missing:
+                                next_question = next_stage_missing[0][1]
+                                stage_intro = self._STAGE_INTRODUCTIONS.get(next_stage, "")
+                                ack = f"Thanks, {known_name}!" if known_name and current_stage == "welcome" and current_field_key == "name" else "Got it!"
+                                if stage_intro:
+                                    state["response"] = f"{ack}\n\n{stage_intro}\n\n{next_question}"
+                                else:
+                                    state["response"] = f"{ack}\n\n{next_question}"
+                            else:
+                                state["response"] = "Got it! Moving to the next stage."
+                        else:
+                            # Onboarding complete
+                            state["next_stage"] = "completed"
+                            state["response"] = "Got it!\n\n" + self._STAGE_INTRODUCTIONS.get("completed", "Congratulations! You've completed onboarding.")
                     else:
                         state["next_stage"] = None
                         next_question = remaining[0][1]
@@ -654,8 +707,7 @@ Rules:
             if known_name and len(known_name) >= 2 and state.get("response"):
                 resp = str(state["response"])
                 # Fix doubled names in response (case-insensitive)
-                import re as re_mod
-                pattern = re_mod.compile(re_mod.escape(known_name) + r"\s*" + re_mod.escape(known_name), re_mod.IGNORECASE)
+                pattern = re.compile(re.escape(known_name) + r"\s*" + re.escape(known_name), re.IGNORECASE)
                 resp = pattern.sub(known_name, resp)
                 state["response"] = resp
 
@@ -670,13 +722,37 @@ Rules:
 
             remaining = self._missing_fields(current_stage, onboarding_facts)
             if len(remaining) == 0:
-                # Only advance if this turn actually captured new info required for this stage.
-                # This avoids auto-advancing due to previously persisted facts.
+                # Stage is complete - automatically move to next stage
                 captured_new_required_info = bool(missing_before) and bool(namespaced_extracted)
                 if captured_new_required_info:
-                    # Do NOT auto-advance stages here. The UI controls progression via a button.
-                    state["next_stage"] = None
+                    # Just completed the last field for this stage
+                    base = (state.get("response") or "").strip()
+                    if guidance:
+                        base = f"{base}\n\n{guidance}".strip() if base else guidance
+                    
+                    # Move to next stage automatically
+                    next_stage = self._next_stage_for(current_stage)
+                    if next_stage and next_stage != "completed":
+                        state["next_stage"] = next_stage
+                        # Get first question of next stage
+                        next_stage_missing = self._missing_fields(next_stage, onboarding_facts)
+                        if next_stage_missing:
+                            next_question = next_stage_missing[0][1]
+                            stage_intro = self._STAGE_INTRODUCTIONS.get(next_stage, "")
+                            if stage_intro:
+                                state["response"] = f"{base}\n\n{stage_intro}\n\n{next_question}".strip() if base else f"{stage_intro}\n\n{next_question}"
+                            else:
+                                state["response"] = f"{base}\n\n{next_question}".strip() if base else next_question
+                        else:
+                            state["response"] = f"{base}\n\nMoving to the next stage.".strip() if base else "Moving to the next stage."
+                    else:
+                        # Onboarding complete
+                        state["next_stage"] = "completed"
+                        completion_intro = self._STAGE_INTRODUCTIONS.get("completed", "Congratulations! You've completed onboarding.")
+                        state["response"] = f"{base}\n\n{completion_intro}".strip() if base else completion_intro
                 else:
+                    # Stage was already complete, just provide a helpful message
+                    state["response"] = "This stage is already complete. You can ask me questions about TechVenture Solutions, or I can help you with the next stage."
                     state["next_stage"] = None
             else:
                 state["next_stage"] = None
