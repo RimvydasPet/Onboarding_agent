@@ -17,9 +17,13 @@ class OnboardingAgentState(TypedDict):
     
     short_term_context: Optional[Dict[str, Any]]
     long_term_memories: List[Dict[str, Any]]
+    onboarding_facts: Dict[str, Any]
     
     response: str
     sources: List[Dict[str, Any]]
+
+    next_stage: Optional[str]
+    extracted_facts: Dict[str, Any]
     
     needs_retrieval: bool
     error: Optional[str]

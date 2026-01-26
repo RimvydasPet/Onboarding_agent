@@ -137,3 +137,17 @@ class LongTermMemory:
                 profile.preferences = {}
             profile.preferences[preference_key] = preference_value
             self.db.commit()
+
+    def clear_user_memories(self, user_id: int):
+        """Delete all long-term memories for a user."""
+        self.db.query(LongTermMemoryDB).filter(
+            LongTermMemoryDB.user_id == user_id
+        ).delete()
+        self.db.commit()
+
+    def reset_onboarding_profile(self, user_id: int):
+        """Reset onboarding profile for a user (delete and recreate)."""
+        self.db.query(OnboardingProfileDB).filter(
+            OnboardingProfileDB.user_id == user_id
+        ).delete()
+        self.db.commit()

@@ -195,7 +195,7 @@ streamlit run simple_chat_app.py
 - Memory systems
 - Good for basic onboarding
 
-#### Option 2: Advanced Chat with RAG + Agent ⭐ Recommended
+#### Option 2: Advanced Chat with RAG + Agent
 
 ```bash
 streamlit run chat_app.py

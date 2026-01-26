@@ -33,7 +33,13 @@ def create_onboarding_agent():
     return app
 
 
-def run_agent(user_input: str, user_id: int = 1, session_id: str = "default", current_stage: str = "welcome"):
+def run_agent(
+    user_input: str,
+    user_id: int = 1,
+    session_id: str = "default",
+    current_stage: str = "welcome",
+    history: list[dict] | None = None,
+):
     """
     Run the onboarding agent with user input.
     
@@ -50,6 +56,8 @@ def run_agent(user_input: str, user_id: int = 1, session_id: str = "default", cu
     
     app = create_onboarding_agent()
     
+    history_messages = history or []
+
     initial_state = {
         "messages": [HumanMessage(content=user_input)],
         "user_input": user_input,
@@ -59,21 +67,30 @@ def run_agent(user_input: str, user_id: int = 1, session_id: str = "default", cu
         "query_analysis": None,
         "retrieved_documents": [],
         "context_string": "",
-        "short_term_context": None,
+        "short_term_context": {
+            "recent_messages": history_messages,
+            "message_count": len(history_messages)
+        },
         "long_term_memories": [],
+        "onboarding_facts": {},
         "response": "",
         "sources": [],
+        "next_stage": None,
+        "extracted_facts": {},
         "needs_retrieval": True,
         "error": None
     }
     
     try:
         result = app.invoke(initial_state)
-        
+        next_stage = result.get("next_stage")
+
         return {
             "response": result.get("response", "I apologize, but I couldn't generate a response."),
             "sources": result.get("sources", []),
-            "stage": current_stage,
+            "stage": next_stage or current_stage,
+            "next_stage": next_stage,
+            "extracted_facts": result.get("extracted_facts", {}),
             "session_id": session_id
         }
     
@@ -83,5 +100,7 @@ def run_agent(user_input: str, user_id: int = 1, session_id: str = "default", cu
             "response": f"I apologize, but I encountered an error: {str(e)}",
             "sources": [],
             "stage": current_stage,
+            "next_stage": None,
+            "extracted_facts": {},
             "session_id": session_id
         }
