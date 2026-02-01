@@ -1,0 +1,15 @@
+.env
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+venv_py311/
+env/
+ENV/
+.venv
+chroma_db/
+*.log
+.DS_Store
+.streamlit/
