@@ -76,15 +76,6 @@ st.markdown("""
         font-size: 0.85rem;
         display: inline-block;
     }
-    .rag-badge {
-        background: #48bb78;
-        color: white;
-        padding: 0.25rem 0.75rem;
-        border-radius: 12px;
-        font-size: 0.75rem;
-        display: inline-block;
-        margin-left: 0.5rem;
-    }
 
     div[data-testid="stSidebar"] div[data-testid="stTextInput"] input {
         font-size: 0.85rem;
@@ -456,13 +447,6 @@ with st.sidebar.expander("Developers info", expanded=False):
 
     st.caption("🤖 AI Mode: RAG + Agent")
     st.markdown(f"**Messages:** {len(st.session_state.messages)}")
-
-    st.markdown(
-        f'<p style="text-align: left; margin: 0.25rem 0 0.75rem 0;">'
-        f'<span class="rag-badge">RAG Enabled</span>'
-        f'</p>',
-        unsafe_allow_html=True
-    )
 
     if st.button("🔄 New Session", use_container_width=True):
         from backend.database.connection import get_db
