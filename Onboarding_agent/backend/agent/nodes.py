@@ -1,6 +1,9 @@
 from typing import Dict, Any
 import json
 import re
+import urllib.request
+import urllib.error
+from datetime import datetime
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 from backend.agent.state import OnboardingAgentState
@@ -179,8 +182,29 @@ class AgentNodes:
             return "it_admin"
         return "general"
 
+    @staticmethod
+    def _normalize_role(role: Any) -> str:
+        return re.sub(r"\s+", " ", str(role or "").strip().lower())
+
     @classmethod
-    def _missing_fields(cls, stage: str, facts: Dict[str, Any]) -> list[tuple[str, str]]:
+    def _generated_bank_cache_key(cls, role: Any) -> str:
+        return f"generated_question_bank.role:{cls._normalize_role(role)}"
+
+    @classmethod
+    def _generated_checklist_cache_key(cls, role: Any) -> str:
+        return f"onboarding_checklist.role:{cls._normalize_role(role)}"
+
+    @classmethod
+    def _role_research_cache_key(cls, role: Any) -> str:
+        return f"role_research.role:{cls._normalize_role(role)}"
+
+    @classmethod
+    def _missing_fields(
+        cls,
+        stage: str,
+        facts: Dict[str, Any],
+        generated_question_bank: Dict[str, Any] | None = None,
+    ) -> list[tuple[str, str]]:
         stage = cls._normalize_stage_key(stage)
         missing: list[tuple[str, str]] = []
 
@@ -190,13 +214,206 @@ class AgentNodes:
         role_category = cls._role_category(role_value) if role_value else "general"
 
         if stage != "welcome":
-            fields.extend(cls._ROLE_STAGE_FIELDS.get(role_category, {}).get(stage, []))
+            stage_bank = None
+            if isinstance(generated_question_bank, dict):
+                stage_bank = generated_question_bank.get(stage)
+
+            if isinstance(stage_bank, list) and stage_bank:
+                for idx, item in enumerate(stage_bank, start=1):
+                    if isinstance(item, (list, tuple)) and len(item) == 2:
+                        field_key, question = item
+                    elif isinstance(item, dict):
+                        field_key = item.get("field") or item.get("key") or f"q{idx}"
+                        question = item.get("question") or item.get("text") or ""
+                    else:
+                        field_key, question = f"q{idx}", str(item)
+
+                    field_key = str(field_key or f"q{idx}")
+                    question = str(question or "").strip()
+                    if question:
+                        fields.append((field_key, question))
+            else:
+                fields.extend(cls._ROLE_STAGE_FIELDS.get(role_category, {}).get(stage, []))
 
         for field_key, question in fields:
             namespaced = f"{stage}.{field_key}"
             if namespaced not in facts or facts.get(namespaced) in (None, ""):
                 missing.append((field_key, question))
         return missing
+
+    def _tavily_search(self, query: str, max_results: int = 5) -> list[dict[str, Any]]:
+        api_key = str(getattr(settings, "TAVILY_API_KEY", "") or "").strip()
+        if not api_key:
+            raise RuntimeError("TAVILY_API_KEY is not configured")
+
+        payload = {
+            "api_key": api_key,
+            "query": query,
+            "max_results": max_results,
+            "include_answer": False,
+            "include_raw_content": False,
+        }
+
+        req = urllib.request.Request(
+            url="https://api.tavily.com/search",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+
+        try:
+            with urllib.request.urlopen(req, timeout=20) as resp:
+                body = resp.read().decode("utf-8")
+            data = json.loads(body)
+        except urllib.error.HTTPError as e:
+            raise RuntimeError(f"Tavily HTTP error: {getattr(e, 'code', '?')}") from e
+        except Exception as e:
+            raise RuntimeError("Tavily request failed") from e
+
+        results = data.get("results")
+        if not isinstance(results, list):
+            return []
+        cleaned: list[dict[str, Any]] = []
+        for r in results:
+            if not isinstance(r, dict):
+                continue
+            cleaned.append(
+                {
+                    "title": r.get("title"),
+                    "url": r.get("url"),
+                    "content": r.get("content"),
+                    "score": r.get("score"),
+                }
+            )
+        return cleaned
+
+    def _generate_role_question_bank_from_research(self, role: str, research_results: list[dict[str, Any]]) -> dict[str, Any]:
+        results_text_parts: list[str] = []
+        for idx, r in enumerate(research_results or [], start=1):
+            if not isinstance(r, dict):
+                continue
+            title = str(r.get("title") or "").strip()
+            url = str(r.get("url") or "").strip()
+            content = str(r.get("content") or "").strip()
+            if not (title or url or content):
+                continue
+            results_text_parts.append(
+                f"[{idx}] {title}\nURL: {url}\nSnippet: {content}".strip()
+            )
+
+        research_block = "\n\n".join(results_text_parts)[:12000]
+
+        prompt = f"""You are creating a role-specific onboarding plan for a new hire.
+
+ROLE: {role}
+
+Use the following web research snippets as background:
+{research_block}
+
+Return ONLY valid JSON with this schema:
+{{
+  "onboarding_checklist": ["..."],
+  "generated_question_bank": {{
+    "profile_setup": [{{"field": "q1", "question": "..."}}],
+    "learning_preferences": [{{"field": "q1", "question": "..."}}],
+    "first_steps": [{{"field": "q1", "question": "..."}}]
+  }}
+}}
+
+Rules:
+- Provide 5-10 checklist items.
+- Provide 3-5 questions per stage.
+- Questions must be specific to the role and phrased conversationally.
+- Do NOT include the welcome stage (name/role are handled separately).
+"""
+
+        response = self.llm.invoke([SystemMessage(content=prompt)])
+        raw = (response.content or "").strip()
+        data = json.loads(raw)
+
+        if not isinstance(data, dict):
+            raise RuntimeError("Question bank generation returned non-object JSON")
+
+        return data
+
+    def _ensure_generated_question_bank(self, state: OnboardingAgentState) -> None:
+        facts = state.get("onboarding_facts") or {}
+        role_value = facts.get("welcome.role")
+        role = self._normalize_role(role_value)
+        if not role:
+            return
+
+        existing_bank = state.get("generated_question_bank")
+        if isinstance(existing_bank, dict) and existing_bank:
+            return
+
+        db = next(get_db())
+        ltm = LongTermMemory(db)
+
+        bank_key = self._generated_bank_cache_key(role)
+        checklist_key = self._generated_checklist_cache_key(role)
+        research_key = self._role_research_cache_key(role)
+
+        cached_bank = ltm.get_memory(state["user_id"], "onboarding_generated", bank_key)
+        cached_checklist = ltm.get_memory(state["user_id"], "onboarding_generated", checklist_key)
+        cached_research = ltm.get_memory(state["user_id"], "onboarding_generated", research_key)
+
+        if isinstance(cached_bank, dict) and cached_bank:
+            state["generated_question_bank"] = cached_bank
+            if isinstance(cached_checklist, list):
+                state["onboarding_checklist"] = cached_checklist
+            if isinstance(cached_research, dict):
+                state["role_research"] = cached_research
+            return
+
+        provider = str(getattr(settings, "WEB_SEARCH_PROVIDER", "tavily") or "tavily").strip().lower()
+        research_results: list[dict[str, Any]] = []
+        search_error = None
+        if provider == "tavily":
+            try:
+                research_results = self._tavily_search(f"{role} onboarding checklist questions", max_results=6)
+            except Exception as e:
+                search_error = str(e)
+                logger.warning(f"Web search failed: {e}")
+
+        generated_payload = self._generate_role_question_bank_from_research(role=role, research_results=research_results)
+
+        generated_bank = generated_payload.get("generated_question_bank")
+        generated_checklist = generated_payload.get("onboarding_checklist")
+        if not isinstance(generated_bank, dict):
+            raise RuntimeError("generated_question_bank missing from generation payload")
+
+        state["generated_question_bank"] = generated_bank
+        state["onboarding_checklist"] = generated_checklist if isinstance(generated_checklist, list) else []
+        state["role_research"] = {
+            "provider": provider,
+            "query": f"{role} onboarding checklist questions",
+            "results": research_results,
+            "generated_at": datetime.utcnow().isoformat(),
+            "error": search_error,
+        }
+
+        ltm.save_memory(
+            user_id=state["user_id"],
+            memory_type="onboarding_generated",
+            key=bank_key,
+            value=generated_bank,
+            importance=3,
+        )
+        ltm.save_memory(
+            user_id=state["user_id"],
+            memory_type="onboarding_generated",
+            key=checklist_key,
+            value=state["onboarding_checklist"],
+            importance=3,
+        )
+        ltm.save_memory(
+            user_id=state["user_id"],
+            memory_type="onboarding_generated",
+            key=research_key,
+            value=state["role_research"],
+            importance=2,
+        )
 
     @staticmethod
     def _tailored_guidance(stage: str, field_key: str, value: Any) -> str:
@@ -312,15 +529,15 @@ class AgentNodes:
             
             db = next(get_db())
             ltm = LongTermMemory(db)
-            
-            important_memories = ltm.get_important_memories(
-                state["user_id"],
-                min_importance=3
-            )
-            
+
+            important_memories = ltm.get_important_memories(state["user_id"], min_importance=3)
             state["long_term_memories"] = important_memories
 
-            onboarding_facts = self._facts_from_memories(important_memories)
+            onboarding_memories = ltm.get_memories_by_type(state["user_id"], "onboarding")
+            onboarding_facts = {}
+            for mem in onboarding_memories or []:
+                if mem.get("key"):
+                    onboarding_facts[str(mem["key"])] = mem.get("value")
 
             # Deduplicate name if stored doubled
             if isinstance(onboarding_facts.get("welcome.name"), str):
@@ -334,6 +551,23 @@ class AgentNodes:
                     mem["value"] = self._deduplicate_name(str(mem["value"]))
 
             state["onboarding_facts"] = onboarding_facts
+
+            role_value = onboarding_facts.get("welcome.role")
+            if role_value:
+                bank_key = self._generated_bank_cache_key(role_value)
+                checklist_key = self._generated_checklist_cache_key(role_value)
+                research_key = self._role_research_cache_key(role_value)
+
+                cached_bank = ltm.get_memory(state["user_id"], "onboarding_generated", bank_key)
+                cached_checklist = ltm.get_memory(state["user_id"], "onboarding_generated", checklist_key)
+                cached_research = ltm.get_memory(state["user_id"], "onboarding_generated", research_key)
+
+                if isinstance(cached_bank, dict):
+                    state["generated_question_bank"] = cached_bank
+                if isinstance(cached_checklist, list):
+                    state["onboarding_checklist"] = cached_checklist
+                if isinstance(cached_research, dict):
+                    state["role_research"] = cached_research
             
             logger.info(f"Loaded {len(recent_messages)} recent messages and {len(important_memories)} memories")
             
@@ -409,7 +643,14 @@ class AgentNodes:
         try:
             current_stage = self._normalize_stage_key(state.get("current_stage"))
             onboarding_facts = dict(state.get("onboarding_facts") or {})
-            missing_before = self._missing_fields(current_stage, onboarding_facts)
+            if current_stage != "welcome":
+                self._ensure_generated_question_bank(state)
+
+            missing_before = self._missing_fields(
+                current_stage,
+                onboarding_facts,
+                generated_question_bank=state.get("generated_question_bank"),
+            )
             current_field_key, current_question = missing_before[0] if missing_before else (None, None)
 
             message_count = state.get("short_term_context", {}).get("message_count", 0)
@@ -427,7 +668,13 @@ class AgentNodes:
                 first_missing = None
                 
                 for check_stage in ["welcome", "profile_setup", "learning_preferences", "first_steps"]:
-                    missing = self._missing_fields(check_stage, onboarding_facts)
+                    if check_stage != "welcome":
+                        self._ensure_generated_question_bank(state)
+                    missing = self._missing_fields(
+                        check_stage,
+                        onboarding_facts,
+                        generated_question_bank=state.get("generated_question_bank"),
+                    )
                     if not missing:
                         completed_stages.append(stage_names[check_stage])
                     elif not first_missing:
@@ -483,14 +730,22 @@ class AgentNodes:
                     onboarding_facts.update(namespaced_extracted)
                     state["onboarding_facts"] = onboarding_facts
 
-                    remaining = self._missing_fields(current_stage, onboarding_facts)
+                    remaining = self._missing_fields(
+                        current_stage,
+                        onboarding_facts,
+                        generated_question_bank=state.get("generated_question_bank"),
+                    )
                     if len(remaining) == 0:
                         # Current stage complete - move to next stage
                         next_stage = self._next_stage_for(current_stage)
                         if next_stage and next_stage != "completed":
                             state["next_stage"] = next_stage
                             # Get first question of next stage
-                            next_stage_missing = self._missing_fields(next_stage, onboarding_facts)
+                            next_stage_missing = self._missing_fields(
+                                next_stage,
+                                onboarding_facts,
+                                generated_question_bank=state.get("generated_question_bank"),
+                            )
                             if next_stage_missing:
                                 next_question = next_stage_missing[0][1]
                                 stage_intro = self._STAGE_INTRODUCTIONS.get(next_stage, "")
@@ -720,7 +975,11 @@ Rules:
                 if key in namespaced_extracted:
                     guidance = self._tailored_guidance(current_stage, current_field_key, namespaced_extracted.get(key))
 
-            remaining = self._missing_fields(current_stage, onboarding_facts)
+            remaining = self._missing_fields(
+                current_stage,
+                onboarding_facts,
+                generated_question_bank=state.get("generated_question_bank"),
+            )
             if len(remaining) == 0:
                 # Stage is complete - automatically move to next stage
                 captured_new_required_info = bool(missing_before) and bool(namespaced_extracted)
@@ -735,7 +994,11 @@ Rules:
                     if next_stage and next_stage != "completed":
                         state["next_stage"] = next_stage
                         # Get first question of next stage
-                        next_stage_missing = self._missing_fields(next_stage, onboarding_facts)
+                        next_stage_missing = self._missing_fields(
+                            next_stage,
+                            onboarding_facts,
+                            generated_question_bank=state.get("generated_question_bank"),
+                        )
                         if next_stage_missing:
                             next_question = next_stage_missing[0][1]
                             stage_intro = self._STAGE_INTRODUCTIONS.get(next_stage, "")
@@ -823,6 +1086,38 @@ Rules:
                 state.get("next_stage") or state["current_stage"],
                 f"conversation_{state['session_id'][:8]}"
             )
+
+            facts = state.get("onboarding_facts") or {}
+            role_value = facts.get("welcome.role")
+            if role_value:
+                bank = state.get("generated_question_bank")
+                checklist = state.get("onboarding_checklist")
+                research = state.get("role_research")
+
+                if isinstance(bank, dict) and bank:
+                    ltm.save_memory(
+                        user_id=state["user_id"],
+                        memory_type="onboarding_generated",
+                        key=self._generated_bank_cache_key(role_value),
+                        value=bank,
+                        importance=3,
+                    )
+                if isinstance(checklist, list) and checklist:
+                    ltm.save_memory(
+                        user_id=state["user_id"],
+                        memory_type="onboarding_generated",
+                        key=self._generated_checklist_cache_key(role_value),
+                        value=checklist,
+                        importance=3,
+                    )
+                if isinstance(research, dict) and research:
+                    ltm.save_memory(
+                        user_id=state["user_id"],
+                        memory_type="onboarding_generated",
+                        key=self._role_research_cache_key(role_value),
+                        value=research,
+                        importance=2,
+                    )
             
             logger.info("Saved conversation to memory")
             

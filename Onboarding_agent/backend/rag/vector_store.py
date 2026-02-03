@@ -1,6 +1,5 @@
 from typing import List, Dict, Any, Optional
 import chromadb
-from chromadb.config import Settings
 from langchain_core.documents import Document
 from langchain_community.embeddings import HuggingFaceEmbeddings
 import logging
@@ -22,10 +21,7 @@ class VectorStore:
         self.collection_name = collection_name
         self.persist_directory = persist_directory
         
-        self.client = chromadb.Client(Settings(
-            persist_directory=persist_directory,
-            anonymized_telemetry=False
-        ))
+        self.client = chromadb.PersistentClient(path=persist_directory)
         
         self.embeddings = HuggingFaceEmbeddings(
             model_name="sentence-transformers/all-MiniLM-L6-v2",

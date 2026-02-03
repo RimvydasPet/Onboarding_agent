@@ -85,6 +85,16 @@ st.markdown("""
         display: inline-block;
         margin-left: 0.5rem;
     }
+
+    div[data-testid="stSidebar"] div[data-testid="stTextInput"] input {
+        font-size: 0.85rem;
+        padding-top: 0.25rem;
+        padding-bottom: 0.25rem;
+    }
+
+    div[data-testid="stSidebar"] div[data-testid="stTextInput"] {
+        margin-bottom: -0.75rem;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -429,10 +439,32 @@ for i, (stage_id, stage_name, emoji) in enumerate(stages):
 st.sidebar.markdown("---")
 
 with st.sidebar.expander("Developers info", expanded=False):
-    st.markdown(f"**Session:** `{st.session_state.session_id[:8]}...`")
+    st.markdown("**Session:**")
+    st.text_input(
+        "Session ID",
+        value=st.session_state.session_id,
+        key="dev_session_id",
+        label_visibility="collapsed",
+        disabled=True,
+    )
+
+    try:
+        _dev_doc_count = rag.vector_store.get_collection_count()
+        st.caption(f"✅ {_dev_doc_count} documents indexed")
+    except Exception:
+        st.caption("⚠️ RAG system initializing...")
+
+    st.caption("🤖 AI Mode: RAG + Agent")
     st.markdown(f"**Messages:** {len(st.session_state.messages)}")
 
-    if st.button("🔄 New Session"):
+    st.markdown(
+        f'<p style="text-align: left; margin: 0.25rem 0 0.75rem 0;">'
+        f'<span class="rag-badge">RAG Enabled</span>'
+        f'</p>',
+        unsafe_allow_html=True
+    )
+
+    if st.button("🔄 New Session", use_container_width=True):
         from backend.database.connection import get_db
         from backend.memory.long_term import LongTermMemory
         from backend.memory.short_term import ShortTermMemory
@@ -508,12 +540,6 @@ else:
     st.sidebar.info("Complete a stage to download your summary.")
 
 st.markdown('<div class="main-header">🤖 AI Onboarding Assistant</div>', unsafe_allow_html=True)
-st.markdown(
-    f'<p style="text-align: center;">'
-    f'<span class="rag-badge">RAG Enabled</span>'
-    f'</p>', 
-    unsafe_allow_html=True
-)
 
 st.markdown("---")
 
@@ -664,6 +690,8 @@ if len(st.session_state.messages) == 0:
                 if st.button("▶️ Let's get started!", use_container_width=True):
                     st.session_state.onboarding_started = True
                     st.rerun()
+
+            st.stop()
         else:
             with st.spinner("🤖 Your onboarding assistant is ready..."):
                 try:
@@ -706,6 +734,8 @@ if len(st.session_state.messages) == 0:
             </p>
         </div>
         """, unsafe_allow_html=True)
+
+        st.stop()
 
 st.markdown("---")
 col1, col2, col3, col4 = st.columns(4)

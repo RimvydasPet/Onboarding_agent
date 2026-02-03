@@ -18,6 +18,10 @@ class OnboardingAgentState(TypedDict):
     short_term_context: Optional[Dict[str, Any]]
     long_term_memories: List[Dict[str, Any]]
     onboarding_facts: Dict[str, Any]
+
+    generated_question_bank: Dict[str, Any]
+    onboarding_checklist: List[str]
+    role_research: Dict[str, Any]
     
     response: str
     sources: List[Dict[str, Any]]
