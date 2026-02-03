@@ -287,6 +287,14 @@ def _generate_comprehensive_onboarding_pdf(user_id: int, session_id: str, facts:
         spaceAfter=8,
         leftIndent=20
     )
+
+    session_id_style = ParagraphStyle(
+        'SessionIdStyle',
+        parent=styles['Normal'],
+        fontSize=9,
+        leading=11,
+        wordWrap='CJK'
+    )
     
     # Header
     story.append(Paragraph("🎯 TechVenture Solutions", title_style))
@@ -295,11 +303,14 @@ def _generate_comprehensive_onboarding_pdf(user_id: int, session_id: str, facts:
     # Metadata table
     user_name = facts.get('welcome.name', 'N/A')
     user_role = facts.get('welcome.role', 'N/A')
+
+    session_id_text = str(session_id or 'N/A')
+    session_id_cell = Paragraph(session_id_text, session_id_style)
     
     metadata = [
         ['Participant:', user_name],
         ['Role:', user_role],
-        ['Session ID:', session_id[:16] + '...'],
+        ['Session ID:', session_id_cell],
         ['Generated:', datetime.now().strftime('%B %d, %Y at %I:%M %p')]
     ]
     
