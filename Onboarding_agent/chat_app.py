@@ -9,6 +9,7 @@ from backend.database.models import OnboardingProfileDB
 from backend.models.schemas import OnboardingStage
 import logging
 from io import BytesIO
+from pathlib import Path
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 
@@ -447,6 +448,116 @@ with st.sidebar.expander("Developers info", expanded=False):
 
     st.caption("🤖 AI Mode: RAG + Agent")
     st.markdown(f"**Messages:** {len(st.session_state.messages)}")
+
+    st.markdown("---")
+    st.markdown("**Upload Markdown to RAG**")
+    _upload_category = st.text_input(
+        "Upload category",
+        value="uploaded",
+        key="dev_upload_category",
+        help="Optional metadata category to help retrieval/reranking.",
+    )
+    _upload_stage = st.selectbox(
+        "Upload stage (optional)",
+        options=["", "welcome", "profile_setup", "learning_preferences", "first_steps"],
+        key="dev_upload_stage",
+    )
+    _uploaded_files = st.file_uploader(
+        "Upload .md files",
+        type=["md", "markdown"],
+        accept_multiple_files=True,
+        key="dev_upload_files",
+        label_visibility="collapsed",
+    )
+    if st.button("📤 Ingest uploaded files", use_container_width=True, key="dev_ingest_files"):
+        if not _uploaded_files:
+            st.warning("No files selected")
+        else:
+            try:
+                from langchain_core.documents import Document
+            except Exception:
+                Document = None
+
+            upload_root = (Path(__file__).resolve().parent / "uploaded_docs")
+            upload_root.mkdir(parents=True, exist_ok=True)
+
+            docs_to_add = []
+            saved = 0
+            for f in _uploaded_files:
+                upload_id = str(uuid.uuid4())
+                file_name = str(getattr(f, "name", "uploaded.md"))
+                try:
+                    raw = f.getvalue()
+                except Exception:
+                    raw = f.read()
+                text = raw.decode("utf-8", errors="replace")
+
+                safe_name = f"{upload_id}_{Path(file_name).name}"
+                (upload_root / safe_name).write_bytes(raw)
+                saved += 1
+
+                meta = {
+                    "origin": "upload",
+                    "upload_id": upload_id,
+                    "file_name": Path(file_name).name,
+                    "category": _upload_category or "uploaded",
+                }
+                if _upload_stage:
+                    meta["stage"] = _upload_stage
+
+                if Document is not None:
+                    docs_to_add.append(Document(page_content=text, metadata=meta))
+                else:
+                    docs_to_add.append(rag.document_processor.create_document(content=text, metadata=meta, source=Path(file_name).name))
+
+            with st.spinner("Indexing uploaded markdown..."):
+                rag.initialize_knowledge_base(docs_to_add)
+
+            st.success(f"Ingested {len(docs_to_add)} file(s) and saved {saved} raw file(s) to {upload_root}")
+            st.rerun()
+
+    st.markdown("---")
+    st.markdown("**Manage uploaded files**")
+    _known_uploads = []
+    try:
+        _known_uploads = rag.vector_store.list_uploaded_files()
+    except Exception:
+        _known_uploads = []
+
+    if not _known_uploads:
+        st.caption("No uploaded files indexed yet.")
+    else:
+        _upload_label_to_id = {
+            f"{u.get('file_name','unknown')} ({u.get('chunks',0)} chunks)": u.get("upload_id")
+            for u in _known_uploads
+        }
+        _selected_label = st.selectbox(
+            "Select uploaded file",
+            options=list(_upload_label_to_id.keys()),
+            key="dev_selected_upload",
+        )
+        _selected_upload_id = _upload_label_to_id.get(_selected_label)
+
+        col_del_a, col_del_b = st.columns([1, 1])
+        with col_del_a:
+            if st.button("🗑️ Delete from index", use_container_width=True, key="dev_delete_upload"):
+                removed = rag.vector_store.delete_by_upload_id(str(_selected_upload_id or ""))
+                st.success(f"Removed {removed} chunk(s) from the vector index")
+                st.rerun()
+
+        with col_del_b:
+            if st.button("🧹 Delete raw file(s)", use_container_width=True, key="dev_delete_raw"):
+                upload_root = (Path(__file__).resolve().parent / "uploaded_docs")
+                deleted = 0
+                if upload_root.exists() and _selected_upload_id:
+                    for p in upload_root.glob(f"{_selected_upload_id}_*"):
+                        try:
+                            p.unlink()
+                            deleted += 1
+                        except Exception as e:
+                            logger.warning(f"Could not delete {p}: {e}")
+                st.success(f"Deleted {deleted} raw file(s)")
+                st.rerun()
 
     if st.button("🔄 New Session", use_container_width=True):
         from backend.database.connection import get_db
