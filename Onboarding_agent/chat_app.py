@@ -9,6 +9,7 @@ from backend.database.models import OnboardingProfileDB
 from backend.models.schemas import OnboardingStage
 import logging
 from io import BytesIO
+from pathlib import Path
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 
@@ -117,6 +118,9 @@ if "unlocked_stages" not in st.session_state:
 
 if "onboarding_started" not in st.session_state:
     st.session_state.onboarding_started = False
+
+if "resume_kickoff_done" not in st.session_state:
+    st.session_state.resume_kickoff_done = False
 
 
 ROLE_STAGE_FIELDS = {
@@ -286,6 +290,14 @@ def _generate_comprehensive_onboarding_pdf(user_id: int, session_id: str, facts:
         spaceAfter=8,
         leftIndent=20
     )
+
+    session_id_style = ParagraphStyle(
+        'SessionIdStyle',
+        parent=styles['Normal'],
+        fontSize=9,
+        leading=11,
+        wordWrap='CJK'
+    )
     
     # Header
     story.append(Paragraph("🎯 TechVenture Solutions", title_style))
@@ -294,11 +306,14 @@ def _generate_comprehensive_onboarding_pdf(user_id: int, session_id: str, facts:
     # Metadata table
     user_name = facts.get('welcome.name', 'N/A')
     user_role = facts.get('welcome.role', 'N/A')
+
+    session_id_text = str(session_id or 'N/A')
+    session_id_cell = Paragraph(session_id_text, session_id_style)
     
     metadata = [
         ['Participant:', user_name],
         ['Role:', user_role],
-        ['Session ID:', session_id[:16] + '...'],
+        ['Session ID:', session_id_cell],
         ['Generated:', datetime.now().strftime('%B %d, %Y at %I:%M %p')]
     ]
     
@@ -417,6 +432,15 @@ stages = [
     ("completed", "Completed", "✅")
 ]
 
+
+def _derive_current_stage_from_facts(facts: dict) -> str:
+    for stage_id, _, _ in stages:
+        if stage_id == "completed":
+            continue
+        if not _is_stage_complete(stage_id, facts):
+            return stage_id
+    return "completed"
+
 current_stage_index = next((i for i, s in enumerate(stages) if s[0] == st.session_state.current_stage), 0)
 
 for i, (stage_id, stage_name, emoji) in enumerate(stages):
@@ -448,6 +472,116 @@ with st.sidebar.expander("Developers info", expanded=False):
     st.caption("🤖 AI Mode: RAG + Agent")
     st.markdown(f"**Messages:** {len(st.session_state.messages)}")
 
+    st.markdown("---")
+    st.markdown("**Upload Markdown to RAG**")
+    _upload_category = st.text_input(
+        "Upload category",
+        value="uploaded",
+        key="dev_upload_category",
+        help="Optional metadata category to help retrieval/reranking.",
+    )
+    _upload_stage = st.selectbox(
+        "Upload stage (optional)",
+        options=["", "welcome", "profile_setup", "learning_preferences", "first_steps"],
+        key="dev_upload_stage",
+    )
+    _uploaded_files = st.file_uploader(
+        "Upload .md files",
+        type=["md", "markdown"],
+        accept_multiple_files=True,
+        key="dev_upload_files",
+        label_visibility="collapsed",
+    )
+    if st.button("📤 Ingest uploaded files", use_container_width=True, key="dev_ingest_files"):
+        if not _uploaded_files:
+            st.warning("No files selected")
+        else:
+            try:
+                from langchain_core.documents import Document
+            except Exception:
+                Document = None
+
+            upload_root = (Path(__file__).resolve().parent / "uploaded_docs")
+            upload_root.mkdir(parents=True, exist_ok=True)
+
+            docs_to_add = []
+            saved = 0
+            for f in _uploaded_files:
+                upload_id = str(uuid.uuid4())
+                file_name = str(getattr(f, "name", "uploaded.md"))
+                try:
+                    raw = f.getvalue()
+                except Exception:
+                    raw = f.read()
+                text = raw.decode("utf-8", errors="replace")
+
+                safe_name = f"{upload_id}_{Path(file_name).name}"
+                (upload_root / safe_name).write_bytes(raw)
+                saved += 1
+
+                meta = {
+                    "origin": "upload",
+                    "upload_id": upload_id,
+                    "file_name": Path(file_name).name,
+                    "category": _upload_category or "uploaded",
+                }
+                if _upload_stage:
+                    meta["stage"] = _upload_stage
+
+                if Document is not None:
+                    docs_to_add.append(Document(page_content=text, metadata=meta))
+                else:
+                    docs_to_add.append(rag.document_processor.create_document(content=text, metadata=meta, source=Path(file_name).name))
+
+            with st.spinner("Indexing uploaded markdown..."):
+                rag.initialize_knowledge_base(docs_to_add)
+
+            st.success(f"Ingested {len(docs_to_add)} file(s) and saved {saved} raw file(s) to {upload_root}")
+            st.rerun()
+
+    st.markdown("---")
+    st.markdown("**Manage uploaded files**")
+    _known_uploads = []
+    try:
+        _known_uploads = rag.vector_store.list_uploaded_files()
+    except Exception:
+        _known_uploads = []
+
+    if not _known_uploads:
+        st.caption("No uploaded files indexed yet.")
+    else:
+        _upload_label_to_id = {
+            f"{u.get('file_name','unknown')} ({u.get('chunks',0)} chunks)": u.get("upload_id")
+            for u in _known_uploads
+        }
+        _selected_label = st.selectbox(
+            "Select uploaded file",
+            options=list(_upload_label_to_id.keys()),
+            key="dev_selected_upload",
+        )
+        _selected_upload_id = _upload_label_to_id.get(_selected_label)
+
+        col_del_a, col_del_b = st.columns([1, 1])
+        with col_del_a:
+            if st.button("🗑️ Delete from index", use_container_width=True, key="dev_delete_upload"):
+                removed = rag.vector_store.delete_by_upload_id(str(_selected_upload_id or ""))
+                st.success(f"Removed {removed} chunk(s) from the vector index")
+                st.rerun()
+
+        with col_del_b:
+            if st.button("🧹 Delete raw file(s)", use_container_width=True, key="dev_delete_raw"):
+                upload_root = (Path(__file__).resolve().parent / "uploaded_docs")
+                deleted = 0
+                if upload_root.exists() and _selected_upload_id:
+                    for p in upload_root.glob(f"{_selected_upload_id}_*"):
+                        try:
+                            p.unlink()
+                            deleted += 1
+                        except Exception as e:
+                            logger.warning(f"Could not delete {p}: {e}")
+                st.success(f"Deleted {deleted} raw file(s)")
+                st.rerun()
+
     if st.button("🔄 New Session", use_container_width=True):
         from backend.database.connection import get_db
         from backend.memory.long_term import LongTermMemory
@@ -472,6 +606,7 @@ with st.sidebar.expander("Developers info", expanded=False):
         st.session_state.current_stage = "welcome"
         st.session_state.unlocked_stages = {"welcome"}
         st.session_state.onboarding_started = False
+        st.session_state.resume_kickoff_done = False
         st.rerun()
 
     st.markdown("---")
@@ -531,7 +666,103 @@ current_stage_messages = [m for m in st.session_state.messages if m.get("stage")
 
 has_existing_progress = bool(_sidebar_facts)
 
-if len(current_stage_messages) == 0 and (has_existing_progress or st.session_state.onboarding_started):
+if has_existing_progress and not st.session_state.messages and not st.session_state.resume_kickoff_done:
+    derived_stage = _derive_current_stage_from_facts(_sidebar_facts)
+    if derived_stage != st.session_state.current_stage:
+        st.session_state.current_stage = derived_stage
+
+    unlocked = {"welcome"}
+    for stage_id, _, _ in stages:
+        unlocked.add(stage_id)
+        if stage_id == derived_stage:
+            break
+    st.session_state.unlocked_stages = unlocked
+
+    if not st.session_state.onboarding_started:
+        st.session_state.onboarding_started = True
+
+    with st.spinner("🤖 Resuming your onboarding..."):
+        try:
+            result = run_agent(
+                user_input="I just arrived and I'm ready to continue onboarding",
+                user_id=st.session_state.user_id,
+                session_id=st.session_state.session_id,
+                current_stage=st.session_state.current_stage,
+            )
+
+            st.session_state.messages.append({
+                "role": "assistant",
+                "content": result["response"],
+                "stage": result.get("next_stage") or st.session_state.current_stage,
+                "sources": result.get("sources", []),
+                "timestamp": datetime.now().isoformat(),
+            })
+
+            next_stage = result.get("next_stage")
+            if next_stage and next_stage != st.session_state.current_stage:
+                st.session_state.current_stage = next_stage
+                st.session_state.unlocked_stages.add(next_stage)
+
+        except Exception as e:
+            logger.error(f"Error resuming onboarding: {e}")
+
+    st.session_state.resume_kickoff_done = True
+    st.rerun()
+
+is_resume_banner = (
+    has_existing_progress
+    and len(st.session_state.messages) == 0
+)
+
+if "skip_next_stage_intro" not in st.session_state:
+    st.session_state.skip_next_stage_intro = False
+
+if "resume_initialized" not in st.session_state:
+    st.session_state.resume_initialized = False
+
+if has_existing_progress and not st.session_state.resume_initialized:
+    stage_ids_in_order = [s[0] for s in stages]
+    interactive_stage_ids = [s for s in stage_ids_in_order if s != "completed"]
+
+    completed_stage_ids: list[str] = [
+        stage_id
+        for stage_id in interactive_stage_ids
+        if _is_stage_complete(stage_id, _sidebar_facts)
+    ]
+
+    next_stage_id = "completed"
+    for stage_id in interactive_stage_ids:
+        if stage_id not in completed_stage_ids:
+            next_stage_id = stage_id
+            break
+
+    st.session_state.resume_completed_stage_ids = completed_stage_ids
+    st.session_state.resume_next_stage_id = next_stage_id
+    st.session_state.resume_total_stages = len(interactive_stage_ids)
+    st.session_state.resume_completed_count = len(completed_stage_ids)
+    st.session_state.resume_initialized = True
+
+_skip_stage_intro = bool(st.session_state.get("skip_next_stage_intro"))
+if _skip_stage_intro:
+    if is_resume_banner:
+        st.session_state.skip_next_stage_intro = False
+    else:
+        stage_titles = {stage_id: stage_name for stage_id, stage_name, _ in stages}
+        stage_title = stage_titles.get(st.session_state.current_stage, st.session_state.current_stage)
+        st.markdown(f"""
+        <div style="text-align: center; padding: 1.5rem 2rem 0.5rem 2rem;">
+            <h2>{stage_title}</h2>
+        </div>
+        """, unsafe_allow_html=True)
+        st.session_state.skip_next_stage_intro = False
+
+if (
+    len(current_stage_messages) == 0
+    and (has_existing_progress or st.session_state.onboarding_started)
+    and not (has_existing_progress and st.session_state.current_stage == "welcome" and len(st.session_state.messages) == 0)
+    and not _skip_stage_intro
+    and not is_resume_banner
+):
     stage_titles = {stage_id: stage_name for stage_id, stage_name, _ in stages}
     stage_title = stage_titles.get(st.session_state.current_stage, st.session_state.current_stage)
 
@@ -545,15 +776,9 @@ if len(current_stage_messages) == 0 and (has_existing_progress or st.session_sta
 
     st.markdown(f"""
     <div style="text-align: center; padding: 2rem;">
-        <h2>👋 {stage_title}</h2>
-        <p style="font-size: 1.2rem; font-style: italic; color: #667eea; margin: 1.5rem 0;">
-            "Success is not final, failure is not fatal: it is the courage to continue that counts." - Winston Churchill
-        </p>
+        <h2>{stage_title}</h2>
         <p style="font-size: 1rem; color: #666; margin: 1.5rem 0;">
             {intro_body}
-        </p>
-        <p style="font-size: 1rem; color: #667eea; font-weight: bold; margin-top: 1.5rem;">
-            📖 Please read this message, then type below to continue.
         </p>
     </div>
     """, unsafe_allow_html=True)
@@ -707,19 +932,47 @@ if len(st.session_state.messages) == 0:
                     </div>
                     """, unsafe_allow_html=True)
     else:
-        st.markdown("""
+        _resume_next_stage_id = st.session_state.get("resume_next_stage_id", "welcome")
+        _resume_completed_count = int(st.session_state.get("resume_completed_count", 0) or 0)
+        _resume_total_stages = int(st.session_state.get("resume_total_stages", 0) or 0)
+        _stage_titles = {stage_id: stage_name for stage_id, stage_name, _ in stages}
+        _next_stage_title = _stage_titles.get(_resume_next_stage_id, _resume_next_stage_id)
+
+        _next_intro_body = {
+            "welcome": "At TechVenture Solutions, we're committed to making your onboarding experience smooth and engaging.",
+            "profile_setup": "Now let's set up your profile. This is important because it helps personalize your experience, improves collaboration, and ensures approvals/support requests reach the right people.",
+            "learning_preferences": "Next we'll learn your working style and preferences. This matters because we can tailor dashboards, integrations, and notifications so TechVenture supports your workflow — not distracts from it.",
+            "first_steps": "Now we'll take your first real actions. This stage is important because it gets you productive quickly: access, integrations, and setting up your first project so you can start delivering results.",
+            "completed": "You're all set. This stage is important because it confirms you're ready to work independently, and it gives you clear next steps to explore advanced features and get ongoing support."
+        }.get(_resume_next_stage_id, "Let's continue your onboarding journey.")
+
+        st.markdown(f"""
         <div style="text-align: center; padding: 2rem;">
             <h2>👋 Welcome back!</h2>
-            <p style="font-size: 1rem; color: #666; margin: 1.5rem 0;">
-                I'm your AI onboarding assistant. You have existing progress saved.
+            <p style="font-size: 1.65rem; color: #667eea; margin: 0.6rem 0 0 0; font-weight: 800;">
+                {_next_stage_title}
             </p>
-            <p style="font-size: 1rem; color: #667eea; font-weight: bold; margin-top: 1.5rem;">
-                Type a message below to continue your onboarding journey!
+            <p style="font-size: 1rem; color: #666; margin: 1.25rem 0;">
+                I found your saved onboarding progress.
+            </p>
+            <p style="font-size: 1.1rem; color: #2d3748; margin: 0.75rem 0;">
+                <strong>Progress:</strong> {_resume_completed_count}/{_resume_total_stages} stage(s) completed
+            </p>
+            <p style="font-size: 1rem; color: #666; margin: 1rem auto 0 auto; max-width: 850px;">
+                {_next_intro_body}
             </p>
         </div>
         """, unsafe_allow_html=True)
 
-        st.stop()
+        col_resume_a, col_resume_b, col_resume_c = st.columns([1, 1, 1])
+        with col_resume_b:
+            if st.button("▶️ Continue where I left off", use_container_width=True, key="resume_continue"):
+                st.session_state.onboarding_started = True
+                st.session_state.current_stage = _resume_next_stage_id
+                st.session_state.skip_next_stage_intro = True
+                if "unlocked_stages" in st.session_state and isinstance(st.session_state.unlocked_stages, set):
+                    st.session_state.unlocked_stages.add(_resume_next_stage_id)
+                st.rerun()
 
 st.markdown("---")
 col1, col2, col3, col4 = st.columns(4)

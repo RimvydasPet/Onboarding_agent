@@ -1,4 +1,5 @@
 from typing import List, Dict, Any, Optional
+import uuid
 import chromadb
 from langchain_core.documents import Document
 from langchain_community.embeddings import HuggingFaceEmbeddings
@@ -51,7 +52,19 @@ class VectorStore:
         
         texts = [doc.page_content for doc in documents]
         metadatas = [doc.metadata for doc in documents]
-        ids = [f"doc_{i}" for i in range(len(documents))]
+
+        ids: List[str] = []
+        for i, meta in enumerate(metadatas):
+            upload_id = str(meta.get("upload_id") or "")
+            source = str(meta.get("source") or "")
+            chunk_id = meta.get("chunk_id")
+            chunk_id_str = "" if chunk_id is None else str(chunk_id)
+            if upload_id:
+                ids.append(f"upload_{upload_id}_{chunk_id_str or i}")
+            elif source:
+                ids.append(f"source_{source}_{chunk_id_str or i}_{uuid.uuid4().hex}")
+            else:
+                ids.append(f"doc_{uuid.uuid4().hex}_{i}")
         
         embeddings = self.embeddings.embed_documents(texts)
         
@@ -104,6 +117,56 @@ class VectorStore:
         
         logger.info(f"Retrieved {len(documents)} documents for query: {query[:50]}...")
         return documents
+
+    def list_uploaded_files(self) -> List[Dict[str, Any]]:
+        """List uploaded file groups based on metadata stored in ChromaDB."""
+
+        try:
+            data = self.collection.get(include=["metadatas"])
+        except Exception as e:
+            logger.error(f"Failed to list uploaded files: {e}")
+            return []
+
+        metadatas = data.get("metadatas") or []
+        grouped: Dict[str, Dict[str, Any]] = {}
+        for meta in metadatas:
+            if not isinstance(meta, dict):
+                continue
+            if meta.get("origin") != "upload":
+                continue
+            upload_id = str(meta.get("upload_id") or "")
+            if not upload_id:
+                continue
+            if upload_id not in grouped:
+                grouped[upload_id] = {
+                    "upload_id": upload_id,
+                    "file_name": meta.get("file_name") or meta.get("source") or "unknown",
+                    "category": meta.get("category") or "uploaded",
+                    "stage": meta.get("stage") or "",
+                    "chunks": 0,
+                }
+            grouped[upload_id]["chunks"] += 1
+
+        return sorted(grouped.values(), key=lambda x: str(x.get("file_name") or ""))
+
+    def delete_by_upload_id(self, upload_id: str) -> int:
+        """Delete all chunks belonging to a given uploaded file."""
+
+        upload_id = str(upload_id or "").strip()
+        if not upload_id:
+            return 0
+
+        try:
+            data = self.collection.get(where={"upload_id": upload_id}, include=[])
+            ids = data.get("ids") or []
+            if not ids:
+                return 0
+            self.collection.delete(ids=ids)
+            logger.info(f"Deleted {len(ids)} chunks for upload_id={upload_id}")
+            return len(ids)
+        except Exception as e:
+            logger.error(f"Failed to delete upload_id={upload_id}: {e}")
+            return 0
     
     def delete_collection(self) -> None:
         """Delete the collection."""

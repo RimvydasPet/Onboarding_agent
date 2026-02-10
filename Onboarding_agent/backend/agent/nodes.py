@@ -343,6 +343,12 @@ Rules:
         if not role:
             return
 
+        # Dynamic question generation requires an LLM provider.
+        # If the Google API key isn't configured, fall back to the static role-based questions.
+        google_key = str(getattr(settings, "GOOGLE_API_KEY", "") or "").strip()
+        if not google_key:
+            return
+
         existing_bank = state.get("generated_question_bank")
         if isinstance(existing_bank, dict) and existing_bank:
             return
@@ -376,7 +382,12 @@ Rules:
                 search_error = str(e)
                 logger.warning(f"Web search failed: {e}")
 
-        generated_payload = self._generate_role_question_bank_from_research(role=role, research_results=research_results)
+        try:
+            generated_payload = self._generate_role_question_bank_from_research(role=role, research_results=research_results)
+        except Exception as e:
+            # Don't break onboarding if optional question generation fails.
+            logger.warning(f"Question bank generation failed; using static role questions: {e}")
+            return
 
         generated_bank = generated_payload.get("generated_question_bank")
         generated_checklist = generated_payload.get("onboarding_checklist")
@@ -1032,8 +1043,13 @@ Rules:
             logger.info("Generated response successfully")
             
         except Exception as e:
-            logger.error(f"Error in generate_response: {e}")
-            state["response"] = "I apologize, but I encountered an error generating a response. Please try again."
+            logger.exception("Error in generate_response")
+            # If misconfigured LLM provider is the cause, give an actionable hint.
+            google_key = str(getattr(settings, "GOOGLE_API_KEY", "") or "").strip()
+            if not google_key:
+                state["response"] = "AI responses are not configured (missing GOOGLE_API_KEY). Please set it and try again."
+            else:
+                state["response"] = "I apologize, but I encountered an error generating a response. Please try again."
             state["error"] = str(e)
             state["next_stage"] = None
             state["extracted_facts"] = {}
