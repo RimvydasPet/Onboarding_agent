@@ -14,7 +14,7 @@ class QueryPlanner:
     def __init__(self):
         """Initialize the query planner with LLM."""
         self.llm = ChatGoogleGenerativeAI(
-            model="gemini-2.0-flash-exp",
+            model=str(getattr(settings, "gemini_model_id", None) or getattr(settings, "GEMINI_MODEL", "gemini-1.5-flash-latest") or "gemini-1.5-flash-latest"),
             google_api_key=settings.GOOGLE_API_KEY,
             temperature=0.3
         )

@@ -7,11 +7,18 @@ from backend.database.connection import init_db
 from backend.database.connection import get_db
 from backend.database.models import OnboardingProfileDB
 from backend.models.schemas import OnboardingStage
+from backend.config import settings
+from backend.memory.long_term import LongTermMemory
+from backend.agent.nodes import AgentNodes
 import logging
 from io import BytesIO
 from pathlib import Path
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
+import json
+import urllib.request
+import urllib.error
+import time
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -97,6 +104,55 @@ def initialize_system():
     rag = initialize_rag_system()
     logger.info("System initialized")
     return rag
+
+
+@st.cache_data(ttl=600)
+def _tavily_connectivity_check(_api_key_len: int) -> dict:
+    api_key = str(getattr(settings, "TAVILY_API_KEY", "") or "").strip()
+    if not api_key:
+        return {"configured": False, "ok": False, "error": "TAVILY_API_KEY missing"}
+
+    payload = {
+        "api_key": api_key,
+        "query": "onboarding checklist",
+        "max_results": 1,
+        "include_answer": False,
+        "include_raw_content": False,
+    }
+
+    req = urllib.request.Request(
+        url="https://api.tavily.com/search",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+
+    t0 = time.time()
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            body = resp.read().decode("utf-8")
+        data = json.loads(body)
+        ok = isinstance(data, dict) and isinstance(data.get("results"), list)
+        return {
+            "configured": True,
+            "ok": bool(ok),
+            "latency_ms": int((time.time() - t0) * 1000),
+            "error": None,
+        }
+    except urllib.error.HTTPError as e:
+        return {
+            "configured": True,
+            "ok": False,
+            "latency_ms": int((time.time() - t0) * 1000),
+            "error": f"HTTP {getattr(e, 'code', '?')} from Tavily",
+        }
+    except Exception as e:
+        return {
+            "configured": True,
+            "ok": False,
+            "latency_ms": int((time.time() - t0) * 1000),
+            "error": f"Request failed: {type(e).__name__}",
+        }
 
 if "session_id" not in st.session_state:
     st.session_state.session_id = str(uuid.uuid4())
@@ -473,6 +529,63 @@ with st.sidebar.expander("Developers info", expanded=False):
     st.markdown(f"**Messages:** {len(st.session_state.messages)}")
 
     st.markdown("---")
+    st.markdown("**Web search (Tavily)**")
+    _provider = str(getattr(settings, "WEB_SEARCH_PROVIDER", "tavily") or "tavily").strip().lower()
+    _key_len = len(str(getattr(settings, "TAVILY_API_KEY", "") or "").strip())
+    st.caption(f"Provider: `{_provider}`")
+    st.caption(f"TAVILY_API_KEY configured: `{'yes' if _key_len > 0 else 'no'}`")
+
+    col_tav_a, col_tav_b = st.columns([1, 1])
+    with col_tav_a:
+        if st.button("Check Tavily", use_container_width=True, key="dev_check_tavily"):
+            _tavily_connectivity_check.clear()
+    with col_tav_b:
+        st.caption("(cached 10 min)")
+
+    _tav_status = _tavily_connectivity_check(_api_key_len=_key_len)
+    if not _tav_status.get("configured"):
+        st.warning("Tavily not configured")
+    elif _tav_status.get("ok"):
+        st.success(f"Tavily OK ({_tav_status.get('latency_ms', '?')} ms)")
+    else:
+        err = _tav_status.get("error") or "unknown error"
+        st.error(f"Tavily error: {err}")
+
+    st.markdown("---")
+    st.markdown("**Onboarding generation debug**")
+    try:
+        _facts = _get_onboarding_facts(st.session_state.user_id) or {}
+        _role = str(_facts.get("welcome.role") or "").strip()
+        st.caption(f"Current stage: `{st.session_state.current_stage}`")
+        st.caption(f"Stored role (welcome.role): `{_role or '(empty)'}`")
+
+        _agent_tmp = AgentNodes()
+        _role_cat_value = _agent_tmp._role_category(_role) if _role else "(none)"
+        st.caption(f"Role category: `{_role_cat_value}`")
+
+        db = next(get_db())
+        ltm = LongTermMemory(db)
+
+        stage_rows = []
+        for _stage_key in ["profile_setup", "learning_preferences", "first_steps"]:
+            bank_key = AgentNodes._generated_bank_cache_key(_role, _stage_key)
+            research_key = AgentNodes._role_research_cache_key(_role, _stage_key)
+            cached_bank = ltm.get_memory(st.session_state.user_id, "onboarding_generated", bank_key)
+            cached_research = ltm.get_memory(st.session_state.user_id, "onboarding_generated", research_key)
+            stage_rows.append(
+                {
+                    "stage": _stage_key,
+                    "bank_questions": len(cached_bank) if isinstance(cached_bank, list) else 0,
+                    "research_cached": bool(isinstance(cached_research, dict) and cached_research),
+                }
+            )
+
+        st.dataframe(stage_rows, use_container_width=True, hide_index=True)
+        st.caption("If stage is `welcome`, generated questions are not created yet. They generate when you enter the next stages.")
+    except Exception as e:
+        st.caption(f"Debug unavailable: {type(e).__name__}")
+
+    st.markdown("---")
     st.markdown("**Upload Markdown to RAG**")
     _upload_category = st.text_input(
         "Upload category",
@@ -807,7 +920,36 @@ for message in st.session_state.messages:
 
 user_input = None
 if has_existing_progress or st.session_state.onboarding_started:
-    user_input = st.chat_input("Ask me anything about TechVenture Solutions...")
+    _last_msg = st.session_state.messages[-1] if st.session_state.messages else None
+    _expecting_profile_pic = bool(
+        isinstance(_last_msg, dict)
+        and _last_msg.get("role") == "assistant"
+        and isinstance(_last_msg.get("content"), str)
+        and "profile picture" in _last_msg.get("content", "").lower()
+        and _last_msg.get("stage") == st.session_state.current_stage
+    )
+
+    if _expecting_profile_pic:
+        _img = st.file_uploader(
+            "Upload a profile picture",
+            type=["png", "jpg", "jpeg"],
+            key=f"profile_pic_uploader_{st.session_state.current_stage}",
+        )
+        if _img is not None:
+            try:
+                upload_root = (Path(__file__).resolve().parent / "uploaded_profile_pics")
+                upload_root.mkdir(parents=True, exist_ok=True)
+                ext = Path(_img.name).suffix.lower() or ".png"
+                safe_ext = ext if ext in (".png", ".jpg", ".jpeg") else ".png"
+                filename = f"user{st.session_state.user_id}_{st.session_state.session_id[:8]}_{int(time.time())}{safe_ext}"
+                target = upload_root / filename
+                target.write_bytes(_img.getvalue())
+                st.image(_img, caption="Selected profile picture", use_container_width=True)
+                user_input = str(target)
+            except Exception as e:
+                st.error(f"Could not save image: {type(e).__name__}")
+    else:
+        user_input = st.chat_input("Ask me anything about TechVenture Solutions...")
 
 if user_input:
     previous_stage = st.session_state.current_stage
