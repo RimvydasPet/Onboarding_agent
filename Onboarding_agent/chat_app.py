@@ -7,11 +7,19 @@ from backend.database.connection import init_db
 from backend.database.connection import get_db
 from backend.database.models import OnboardingProfileDB
 from backend.models.schemas import OnboardingStage
+from backend.config import settings
+from backend.memory.long_term import LongTermMemory
+from backend.agent.nodes import AgentNodes
 import logging
+from sqlalchemy.orm.attributes import flag_modified
 from io import BytesIO
 from pathlib import Path
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
+import json
+import urllib.request
+import urllib.error
+import time
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -98,6 +106,55 @@ def initialize_system():
     logger.info("System initialized")
     return rag
 
+
+@st.cache_data(ttl=600)
+def _tavily_connectivity_check(_api_key_len: int) -> dict:
+    api_key = str(getattr(settings, "TAVILY_API_KEY", "") or "").strip()
+    if not api_key:
+        return {"configured": False, "ok": False, "error": "TAVILY_API_KEY missing"}
+
+    payload = {
+        "api_key": api_key,
+        "query": "onboarding checklist",
+        "max_results": 1,
+        "include_answer": False,
+        "include_raw_content": False,
+    }
+
+    req = urllib.request.Request(
+        url="https://api.tavily.com/search",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+
+    t0 = time.time()
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            body = resp.read().decode("utf-8")
+        data = json.loads(body)
+        ok = isinstance(data, dict) and isinstance(data.get("results"), list)
+        return {
+            "configured": True,
+            "ok": bool(ok),
+            "latency_ms": int((time.time() - t0) * 1000),
+            "error": None,
+        }
+    except urllib.error.HTTPError as e:
+        return {
+            "configured": True,
+            "ok": False,
+            "latency_ms": int((time.time() - t0) * 1000),
+            "error": f"HTTP {getattr(e, 'code', '?')} from Tavily",
+        }
+    except Exception as e:
+        return {
+            "configured": True,
+            "ok": False,
+            "latency_ms": int((time.time() - t0) * 1000),
+            "error": f"Request failed: {type(e).__name__}",
+        }
+
 if "session_id" not in st.session_state:
     st.session_state.session_id = str(uuid.uuid4())
 
@@ -168,26 +225,54 @@ def _required_fields_for_stage(stage: str, facts: dict) -> list[str]:
 
 
 def _get_onboarding_facts(user_id: int) -> dict:
-    from backend.memory.long_term import LongTermMemory
     db = next(get_db())
+    profile = db.query(OnboardingProfileDB).filter(OnboardingProfileDB.user_id == user_id).first()
+    profile_facts = {}
+    if profile and profile.progress:
+        profile_facts = profile.progress.get("facts", {})
+
+    # Fallback: also read from LongTermMemoryDB (the agent always saves there)
     ltm = LongTermMemory(db)
-    memories = ltm.get_memories_by_type(user_id, "onboarding")
-    facts = {}
-    for mem in memories:
-        if mem.get("key"):
-            facts[mem["key"]] = mem["value"]
-    return facts
+    ltm_memories = ltm.get_memories_by_type(user_id, "onboarding")
+    ltm_facts = {}
+    for m in ltm_memories or []:
+        k = m.get("key")
+        if k:
+            ltm_facts[str(k)] = m.get("value")
+
+    # Merge: LTM facts as base, profile facts override
+    merged = {**ltm_facts, **profile_facts}
+
+    # Backfill to profile if there are LTM facts missing from profile
+    if merged and merged != profile_facts and profile:
+        if profile.progress is None:
+            profile.progress = {}
+        profile.progress["facts"] = merged
+        flag_modified(profile, "progress")
+        db.commit()
+
+    return merged
 
 
 def _is_stage_complete(stage: str, facts: dict) -> bool:
-    required = _required_fields_for_stage(stage, facts)
-    if not required:
-        return stage == "completed"
-    for f in required:
-        key = f"{stage}.{f}"
-        if key not in facts or facts.get(key) in (None, ""):
-            return False
-    return True
+    if stage == "welcome":
+        # Welcome stage requires name and role
+        return bool(facts.get("welcome.name") and facts.get("welcome.role"))
+    if stage == "completed":
+        return False
+    
+    # For other stages, check if ANY facts exist for that stage
+    # This works with both static and dynamic field keys (q1, q2, etc.)
+    # Exclude internal metadata keys (_qlabel.*, qa.pending_stage)
+    stage_prefix = f"{stage}."
+    stage_facts = [
+        k for k in facts.keys()
+        if k.startswith(stage_prefix)
+        and facts.get(k) not in (None, "")
+        and not k[len(stage_prefix):].startswith("_qlabel.")
+        and k[len(stage_prefix):] != "qa.pending_stage"
+    ]
+    return len(stage_facts) > 0
 
 
 def _generate_stage_summary_pdf(user_id: int, session_id: str, stage: str, answers: list[str]) -> bytes:
@@ -342,13 +427,10 @@ def _generate_comprehensive_onboarding_pdf(user_id: int, session_id: str, facts:
     
     # Process each stage
     for stage_id, stage_title, stage_desc in stage_info:
-        required_fields = _required_fields_for_stage(stage_id, facts)
-        if not required_fields:
-            continue
-            
-        # Check if stage has any data
-        has_data = any(facts.get(f"{stage_id}.{field}") for field in required_fields)
-        if not has_data:
+        # Find all facts for this stage (works with both static and dynamic field keys)
+        stage_facts = {k: v for k, v in facts.items() if k.startswith(f"{stage_id}.") and v not in (None, "")}
+        
+        if not stage_facts:
             continue
         
         # Stage header
@@ -357,19 +439,49 @@ def _generate_comprehensive_onboarding_pdf(user_id: int, session_id: str, facts:
         
         # Stage data
         stage_data = []
-        for field in required_fields:
-            key = f"{stage_id}.{field}"
-            value = facts.get(key, "Not provided")
-            label = field.replace("_", " ").title()
-            stage_data.append([label, str(value)])
+        label_style = ParagraphStyle(
+            'LabelStyle',
+            parent=styles['Normal'],
+            fontSize=11,
+            spaceAfter=4,
+            fontName='Helvetica-Bold',
+            alignment=TA_LEFT,
+        )
+        # Build a lookup of question labels: field_key -> question text
+        qlabel_map = {}
+        for k, v in stage_facts.items():
+            parts = k.split(".", 1)
+            if len(parts) == 2 and parts[1].startswith("_qlabel."):
+                actual_field = parts[1].replace("_qlabel.", "", 1)
+                qlabel_map[actual_field] = str(v)
+
+        for key, value in sorted(stage_facts.items()):
+            field = key.split(".", 1)[1] if "." in key else key
+            # Skip internal metadata keys
+            if field.startswith("_qlabel.") or field == "qa.pending_stage":
+                continue
+            # Use stored question text if available, otherwise humanise the key
+            label = qlabel_map.get(field, field.replace("_", " ").title())
+            label_cell = Paragraph(label, label_style)
+            # Wrap all text in Paragraph for proper text wrapping
+            value_text = str(value)
+            
+            # Check if value is a file path (uploaded photo)
+            if value_text.startswith("/") or value_text.startswith("C:") or "uploaded_profile_pics" in value_text:
+                # Make it a clickable link
+                value_cell = Paragraph(f'<link href="file://{value_text}" color="blue"><u>{value_text}</u></link>', field_style)
+            else:
+                value_cell = Paragraph(value_text, field_style)
+            stage_data.append([label_cell, value_cell])
         
         if stage_data:
             stage_table = Table(stage_data, colWidths=[2*inch, 4*inch])
             stage_table.setStyle(TableStyle([
                 ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#e0e7ff')),
                 ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
-                ('ALIGN', (0, 0), (0, -1), 'RIGHT'),
+                ('ALIGN', (0, 0), (0, -1), 'LEFT'),
                 ('ALIGN', (1, 0), (1, -1), 'LEFT'),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
                 ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
                 ('FONTSIZE', (0, 0), (-1, -1), 11),
                 ('BOTTOMPADDING', (0, 0), (-1, -1), 10),
@@ -403,6 +515,7 @@ def _save_stage_answers_to_profile(user_id: int, stage: str, answers: list[str])
         "answers": answers,
         "updated_at": datetime.now().isoformat()
     }
+    flag_modified(profile, "progress")
     db.commit()
 
 
@@ -418,6 +531,7 @@ def _save_facts_to_profile(user_id: int, new_facts: dict) -> None:
     if not isinstance(profile.progress.get("facts"), dict):
         profile.progress["facts"] = {}
     profile.progress["facts"].update(new_facts)
+    flag_modified(profile, "progress")
     db.commit()
 
 rag = initialize_system()
@@ -471,6 +585,63 @@ with st.sidebar.expander("Developers info", expanded=False):
 
     st.caption("🤖 AI Mode: RAG + Agent")
     st.markdown(f"**Messages:** {len(st.session_state.messages)}")
+
+    st.markdown("---")
+    st.markdown("**Web search (Tavily)**")
+    _provider = str(getattr(settings, "WEB_SEARCH_PROVIDER", "tavily") or "tavily").strip().lower()
+    _key_len = len(str(getattr(settings, "TAVILY_API_KEY", "") or "").strip())
+    st.caption(f"Provider: `{_provider}`")
+    st.caption(f"TAVILY_API_KEY configured: `{'yes' if _key_len > 0 else 'no'}`")
+
+    col_tav_a, col_tav_b = st.columns([1, 1])
+    with col_tav_a:
+        if st.button("Check Tavily", use_container_width=True, key="dev_check_tavily"):
+            _tavily_connectivity_check.clear()
+    with col_tav_b:
+        st.caption("(cached 10 min)")
+
+    _tav_status = _tavily_connectivity_check(_api_key_len=_key_len)
+    if not _tav_status.get("configured"):
+        st.warning("Tavily not configured")
+    elif _tav_status.get("ok"):
+        st.success(f"Tavily OK ({_tav_status.get('latency_ms', '?')} ms)")
+    else:
+        err = _tav_status.get("error") or "unknown error"
+        st.error(f"Tavily error: {err}")
+
+    st.markdown("---")
+    st.markdown("**Onboarding generation debug**")
+    try:
+        _facts = _get_onboarding_facts(st.session_state.user_id) or {}
+        _role = str(_facts.get("welcome.role") or "").strip()
+        st.caption(f"Current stage: `{st.session_state.current_stage}`")
+        st.caption(f"Stored role (welcome.role): `{_role or '(empty)'}`")
+
+        _agent_tmp = AgentNodes()
+        _role_cat_value = _agent_tmp._role_category(_role) if _role else "(none)"
+        st.caption(f"Role category: `{_role_cat_value}`")
+
+        db = next(get_db())
+        ltm = LongTermMemory(db)
+
+        stage_rows = []
+        for _stage_key in ["profile_setup", "learning_preferences", "first_steps"]:
+            bank_key = AgentNodes._generated_bank_cache_key(_role, _stage_key)
+            research_key = AgentNodes._role_research_cache_key(_role, _stage_key)
+            cached_bank = ltm.get_memory(st.session_state.user_id, "onboarding_generated", bank_key)
+            cached_research = ltm.get_memory(st.session_state.user_id, "onboarding_generated", research_key)
+            stage_rows.append(
+                {
+                    "stage": _stage_key,
+                    "bank_questions": len(cached_bank) if isinstance(cached_bank, list) else 0,
+                    "research_cached": bool(isinstance(cached_research, dict) and cached_research),
+                }
+            )
+
+        st.dataframe(stage_rows, use_container_width=True, hide_index=True)
+        st.caption("If stage is `welcome`, generated questions are not created yet. They generate when you enter the next stages.")
+    except Exception as e:
+        st.caption(f"Debug unavailable: {type(e).__name__}")
 
     st.markdown("---")
     st.markdown("**Upload Markdown to RAG**")
@@ -795,19 +966,81 @@ for message in st.session_state.messages:
         if st.session_state.show_sources and "sources" in message and message["sources"]:
             with st.expander(f"📚 Sources ({len(message['sources'])})"):
                 for i, source in enumerate(message["sources"], 1):
+                    _src_file_name = source.get('file_name', '')
+                    _src_upload_id = source.get('upload_id', '')
+                    _src_display_name = _src_file_name or source.get('source', 'unknown')
+
                     st.markdown(f"""
                     <div class="source-card">
-                        <strong>Source {i}:</strong> {source.get('source', 'unknown')}<br>
+                        <strong>Source {i}:</strong> {_src_display_name}<br>
                         <strong>Category:</strong> {source.get('category', 'general')}<br>
                         <strong>Relevance:</strong> {source.get('score', 0):.2f}<br>
                         <em>{source.get('preview', '')}</em>
                     </div>
                     """, unsafe_allow_html=True)
 
+                    if _src_file_name and _src_upload_id:
+                        with st.expander(f"📄 View full document: {_src_file_name}"):
+                            _upload_root = Path(__file__).resolve().parent / "uploaded_docs"
+                            _found_files = list(_upload_root.glob(f"{_src_upload_id}_*")) if _upload_root.exists() else []
+                            if _found_files:
+                                try:
+                                    _doc_text = _found_files[0].read_text(encoding="utf-8", errors="replace")
+                                    st.markdown(_doc_text)
+                                except Exception as _read_err:
+                                    st.error(f"Could not read file: {_read_err}")
+                            else:
+                                st.warning(f"Raw file not found for upload ID: {_src_upload_id}")
+
 
 user_input = None
 if has_existing_progress or st.session_state.onboarding_started:
-    user_input = st.chat_input("Ask me anything about TechVenture Solutions...")
+    _last_msg = st.session_state.messages[-1] if st.session_state.messages else None
+    _last_content = (
+        str(_last_msg.get("content") or "").lower()
+        if isinstance(_last_msg, dict)
+        else ""
+    )
+    _expecting_profile_pic = bool(
+        isinstance(_last_msg, dict)
+        and _last_msg.get("role") == "assistant"
+        and isinstance(_last_msg.get("content"), str)
+        and _last_msg.get("stage") == st.session_state.current_stage
+        and any(
+            k in _last_content
+            for k in [
+                "profile picture",
+                "profile photo",
+                "headshot",
+                "upload a photo",
+                "upload your photo",
+                "upload a headshot",
+                "upload your headshot",
+            ]
+        )
+    )
+
+    if _expecting_profile_pic:
+        _img = st.file_uploader(
+            "Upload a profile picture",
+            type=["png", "jpg", "jpeg"],
+            key=f"profile_pic_uploader_{st.session_state.current_stage}",
+        )
+        if _img is not None:
+            try:
+                upload_root = (Path(__file__).resolve().parent / "uploaded_profile_pics")
+                upload_root.mkdir(parents=True, exist_ok=True)
+                ext = Path(_img.name).suffix.lower() or ".png"
+                safe_ext = ext if ext in (".png", ".jpg", ".jpeg") else ".png"
+                filename = f"user{st.session_state.user_id}_{st.session_state.session_id[:8]}_{int(time.time())}{safe_ext}"
+                target = upload_root / filename
+                target.write_bytes(_img.getvalue())
+                st.image(_img, caption="Selected profile picture", use_container_width=True)
+                user_input = str(target)
+            except Exception as e:
+                st.error(f"Could not save image: {type(e).__name__}")
+    else:
+        user_input = st.chat_input("Ask me anything about TechVenture Solutions...")
 
 if user_input:
     previous_stage = st.session_state.current_stage

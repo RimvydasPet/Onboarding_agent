@@ -11,6 +11,15 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "sqlite:///./onboarding.db"
     REDIS_URL: str = "redis://localhost:6379/0"
 
+    GEMINI_MODEL: str = "gemini-1.5-flash-latest"
+
+    @property
+    def gemini_model_id(self) -> str:
+        model = str(self.GEMINI_MODEL or "").strip()
+        if model.startswith("models/"):
+            return model[len("models/"):]
+        return model
+
     WEB_SEARCH_PROVIDER: str = "tavily"
     TAVILY_API_KEY: str = ""
     

@@ -32,72 +32,60 @@ class AgentNodes:
         "completed": []
     }
 
-    _ROLE_STAGE_FIELDS: Dict[str, Dict[str, list[tuple[str, str]]]] = {
-        "developer": {
-            "profile_setup": [
-                ("dev_stack", "Which programming language(s) or tech stack will you work with most here?"),
-                ("dev_repo_access", "Which repos/projects do you need access to first (or which team are you joining)?"),
-                ("dev_env", "What’s your preferred dev setup (IDE, OS, local vs. container/devbox)?")
-            ],
-            "learning_preferences": [
-                ("dev_workflow", "How do you usually work: feature branches, trunk-based, or something else?"),
-                ("dev_quality", "What matters most for you early on: tests/CI, code review flow, or local environment speed?"),
-                ("dev_integrations", "Which tools should we integrate first for your workflow (e.g., GitHub, Jira, Slack)?")
-            ],
-            "first_steps": [
-                ("dev_first_task", "Do you already have a first ticket/issue to start with? If yes, what is it about?"),
-                ("dev_access_blockers", "Anything blocking you right now (accounts, permissions, VPN, SSO, repo access)?"),
-                ("dev_help_area", "Where do you want help first: environment setup, permissions, or finding the right docs?"),
-            ],
-        },
-        "pm": {
-            "profile_setup": [
-                ("pm_area", "What kind of work do you manage most (product, delivery, internal ops, client projects)?"),
-                ("pm_reporting", "What reporting cadence do you need (weekly status, sprint reviews, exec dashboards)?"),
-                ("pm_stakeholders", "Who are your main stakeholders (team, leadership, clients) so we can shape updates accordingly?")
-            ],
-            "learning_preferences": [
-                ("pm_planning_style", "Do you plan work in sprints, kanban, or a hybrid approach?"),
-                ("pm_pain", "What’s the biggest pain today: visibility, prioritization, dependencies, or stakeholder updates?"),
-                ("pm_integrations", "Which tools should we integrate first (e.g., Jira, Slack, Google Workspace)?")
-            ],
-            "first_steps": [
-                ("pm_first_project", "Do you want to set up your first project, or import an existing one?"),
-                ("pm_team_invite", "Who should we invite first (team members or stakeholders)?"),
-                ("pm_help_area", "Where do you want help first: project setup, reporting, or permissions?"),
-            ],
-        },
-        "it_admin": {
-            "profile_setup": [
-                ("it_scope", "What are you responsible for here: user provisioning, integrations, security, or all of the above?"),
-                ("it_sso", "Do you need SSO/SCIM (Okta/Azure AD/Google) enabled from day one?"),
-                ("it_compliance", "Any compliance/security requirements we should align with (SOC2, ISO, audit logs, retention)?")
-            ],
-            "learning_preferences": [
-                ("it_integrations", "Which integrations are highest priority (Slack, Jira, Google Workspace, email)?"),
-                ("it_permissions", "How do you want permissions structured: least privilege by default, or flexible team-managed access?"),
-                ("it_notifications", "Where should admin alerts go (email, Slack) and who should be notified?")
-            ],
-            "first_steps": [
-                ("it_first_action", "What should we set up first: SSO, integrations, or a workspace permission baseline?"),
-                ("it_users", "How many users are you onboarding initially, and do you need groups/teams pre-created?"),
-                ("it_help_area", "Where do you want help first: SSO/SCIM, integrations, or permissions?"),
-            ],
-        },
-        "general": {
-            "profile_setup": [
-                ("focus_area", "What will you use TechVenture for most: planning, execution, or coordination across teams?"),
-            ],
-            "learning_preferences": [
-                ("preferred_learning", "How do you prefer to learn: quick tour, docs, or hands-on walkthrough?"),
-            ],
-            "first_steps": [
-                ("first_setup", "What do you want to set up first: a project, inviting teammates, or integrations?"),
-            ],
-        },
+    _STAGE_ORDER = ["welcome", "profile_setup", "learning_preferences", "first_steps", "completed"]
+
+    _STAGE_QA_PROMPTS: Dict[str, str] = {
+        "welcome": (
+            "Before we move on — do you have any questions about TechVenture Solutions or the onboarding process? "
+            "I can look up answers from our company documents. If you're all set, just say **'move on'** and we'll continue!"
+        ),
+        "profile_setup": (
+            "That wraps up your profile setup! Do you have any questions about your profile, team visibility, "
+            "or how your information is used at TechVenture Solutions? I'll check our company docs for you. "
+            "Otherwise, say **'move on'** to proceed."
+        ),
+        "learning_preferences": (
+            "Great, your learning preferences are all set! Any questions about integrations, notifications, "
+            "or how we'll customize your experience? I can search our knowledge base for answers. "
+            "When you're ready, say **'move on'** to continue."
+        ),
+        "first_steps": (
+            "Awesome — your first steps are mapped out! Do you have any questions about getting started, "
+            "access, or anything else? I'll look through our company documents to help. "
+            "Say **'move on'** when you're ready to wrap up."
+        ),
     }
 
-    _STAGE_ORDER = ["welcome", "profile_setup", "learning_preferences", "first_steps", "completed"]
+    _QA_FALLBACK_CONTACTS: Dict[str, str] = {
+        "it": "the **IT Help Desk** (helpdesk@techventure.com)",
+        "access": "the **IT Help Desk** (helpdesk@techventure.com)",
+        "permission": "the **IT Help Desk** (helpdesk@techventure.com)",
+        "security": "the **Security Team** (security@techventure.com)",
+        "password": "the **IT Help Desk** (helpdesk@techventure.com)",
+        "hr": "the **HR Department** (hr@techventure.com)",
+        "leave": "the **HR Department** (hr@techventure.com)",
+        "vacation": "the **HR Department** (hr@techventure.com)",
+        "salary": "the **HR Department** (hr@techventure.com)",
+        "benefit": "the **HR Department** (hr@techventure.com)",
+        "payroll": "the **HR Department** (hr@techventure.com)",
+        "contract": "the **HR Department** (hr@techventure.com)",
+        "expense": "the **Finance Team** (finance@techventure.com)",
+        "travel": "the **Finance Team** (finance@techventure.com)",
+        "reimbursement": "the **Finance Team** (finance@techventure.com)",
+        "billing": "the **Finance Team** (finance@techventure.com)",
+        "manager": "your **direct manager**",
+        "team": "your **direct manager**",
+        "project": "your **project lead or direct manager**",
+    }
+
+    _QA_DEFAULT_FALLBACK = (
+        "I wasn't able to find a specific answer in our company documents. "
+        "For more details, I'd recommend reaching out to {contact}. "
+        "They'll be happy to help!\n\n"
+        "Do you have any other questions, or shall we **move on**?"
+    )
+
+    _QA_DEFAULT_CONTACT = "your **direct manager** or the **HR Department** (hr@techventure.com)"
 
     _STAGE_INTRODUCTIONS: Dict[str, str] = {
         "profile_setup": (
@@ -108,7 +96,7 @@ class AgentNodes:
         ),
         "learning_preferences": (
             "📚 **Learning Preferences**\n\n"
-            "Let's understand how you work best! This stage helps us tailor TechVenture to your "
+            "Let's understand how you work best! This stage helps us tailor TechVenture Solutions to your "
             "workflow, recommend the right integrations, and set up notifications that work for you — "
             "not against you. The better we understand your needs, the more productive you'll be."
         ),
@@ -116,7 +104,7 @@ class AgentNodes:
             "🚀 **First Steps**\n\n"
             "Time to take action! In this stage, we'll make sure you have everything you need to hit "
             "the ground running — from account access to creating your first project. This is where "
-            "onboarding becomes real and you start seeing TechVenture in action."
+            "onboarding becomes real and you start seeing TechVenture Solutions in action."
         ),
         "completed": (
             "🎉 **Onboarding Complete!**\n\n"
@@ -187,16 +175,18 @@ class AgentNodes:
         return re.sub(r"\s+", " ", str(role or "").strip().lower())
 
     @classmethod
-    def _generated_bank_cache_key(cls, role: Any) -> str:
-        return f"generated_question_bank.role:{cls._normalize_role(role)}"
+    def _generated_bank_cache_key(cls, role: Any, stage: str) -> str:
+        stage = cls._normalize_stage_key(stage)
+        return f"generated_question_bank.role:{cls._normalize_role(role)}.stage:{stage}"
 
     @classmethod
     def _generated_checklist_cache_key(cls, role: Any) -> str:
         return f"onboarding_checklist.role:{cls._normalize_role(role)}"
 
     @classmethod
-    def _role_research_cache_key(cls, role: Any) -> str:
-        return f"role_research.role:{cls._normalize_role(role)}"
+    def _role_research_cache_key(cls, role: Any, stage: str) -> str:
+        stage = cls._normalize_stage_key(stage)
+        return f"role_research.role:{cls._normalize_role(role)}.stage:{stage}"
 
     @classmethod
     def _missing_fields(
@@ -209,9 +199,6 @@ class AgentNodes:
         missing: list[tuple[str, str]] = []
 
         fields: list[tuple[str, str]] = list(cls._STAGE_FIELDS.get(stage, []))
-
-        role_value = facts.get("welcome.role")
-        role_category = cls._role_category(role_value) if role_value else "general"
 
         if stage != "welcome":
             stage_bank = None
@@ -232,8 +219,6 @@ class AgentNodes:
                     question = str(question or "").strip()
                     if question:
                         fields.append((field_key, question))
-            else:
-                fields.extend(cls._ROLE_STAGE_FIELDS.get(role_category, {}).get(stage, []))
 
         for field_key, question in fields:
             namespaced = f"{stage}.{field_key}"
@@ -287,7 +272,7 @@ class AgentNodes:
             )
         return cleaned
 
-    def _generate_role_question_bank_from_research(self, role: str, research_results: list[dict[str, Any]]) -> dict[str, Any]:
+    def _generate_role_question_bank_from_research(self, role: str, stage: str, research_results: list[dict[str, Any]]) -> dict[str, Any]:
         results_text_parts: list[str] = []
         for idx, r in enumerate(research_results or [], start=1):
             if not isinstance(r, dict):
@@ -303,9 +288,12 @@ class AgentNodes:
 
         research_block = "\n\n".join(results_text_parts)[:12000]
 
+        stage = self._normalize_stage_key(stage)
+
         prompt = f"""You are creating a role-specific onboarding plan for a new hire.
 
 ROLE: {role}
+STAGE: {stage}
 
 Use the following web research snippets as background:
 {research_block}
@@ -313,63 +301,100 @@ Use the following web research snippets as background:
 Return ONLY valid JSON with this schema:
 {{
   "onboarding_checklist": ["..."],
-  "generated_question_bank": {{
-    "profile_setup": [{{"field": "q1", "question": "..."}}],
-    "learning_preferences": [{{"field": "q1", "question": "..."}}],
-    "first_steps": [{{"field": "q1", "question": "..."}}]
-  }}
+  "questions": [{{"field": "q1", "question": "..."}}]
 }}
 
 Rules:
-- Provide 5-10 checklist items.
-- Provide 3-5 questions per stage.
+- Provide 5-10 checklist items relevant to the role (can be general, not stage-specific).
+- Provide 3-5 questions ONLY for the given STAGE.
 - Questions must be specific to the role and phrased conversationally.
-- Do NOT include the welcome stage (name/role are handled separately).
+- Do NOT generate questions for the welcome stage (name/role are handled separately).
 """
 
-        response = self.llm.invoke([SystemMessage(content=prompt)])
+        if not str(prompt or "").strip():
+            raise ValueError("contents are required")
+
+        # Some Gemini backends reject SystemMessage-only inputs; provide the prompt as user content.
+        response = self.llm.invoke([HumanMessage(content=prompt)])
         raw = (response.content or "").strip()
-        data = json.loads(raw)
+
+        if not raw:
+            raise RuntimeError("Gemini returned empty content")
+
+        # Be tolerant to code fences or leading/trailing text.
+        cleaned = raw
+        if cleaned.startswith("```"):
+            cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned, flags=re.IGNORECASE)
+            cleaned = re.sub(r"\s*```\s*$", "", cleaned)
+            cleaned = cleaned.strip()
+
+        # Try direct parse first.
+        try:
+            data = json.loads(cleaned)
+        except Exception:
+            # Fallback: extract first JSON object in the text.
+            start = cleaned.find("{")
+            end = cleaned.rfind("}")
+            if start == -1 or end == -1 or end <= start:
+                preview = cleaned[:400].replace("\n", "\\n")
+                raise RuntimeError(f"Gemini did not return JSON. Output preview: {preview}")
+            candidate = cleaned[start : end + 1]
+            try:
+                data = json.loads(candidate)
+            except Exception as e:
+                preview = candidate[:400].replace("\n", "\\n")
+                raise RuntimeError(f"Gemini returned invalid JSON: {type(e).__name__}. JSON preview: {preview}")
 
         if not isinstance(data, dict):
             raise RuntimeError("Question bank generation returned non-object JSON")
 
         return data
 
-    def _ensure_generated_question_bank(self, state: OnboardingAgentState) -> None:
+    def _ensure_generated_question_bank(self, state: OnboardingAgentState, stage: str) -> None:
         facts = state.get("onboarding_facts") or {}
         role_value = facts.get("welcome.role")
         role = self._normalize_role(role_value)
         if not role:
             return
 
-        # Dynamic question generation requires an LLM provider.
-        # If the Google API key isn't configured, fall back to the static role-based questions.
-        google_key = str(getattr(settings, "GOOGLE_API_KEY", "") or "").strip()
-        if not google_key:
+        stage = self._normalize_stage_key(stage)
+        if stage in ("welcome", "completed"):
             return
 
+        # Dynamic question generation requires an LLM provider.
+        google_key = str(getattr(settings, "GOOGLE_API_KEY", "") or "").strip()
+        if not google_key:
+            raise RuntimeError("GOOGLE_API_KEY is not configured")
+
         existing_bank = state.get("generated_question_bank")
-        if isinstance(existing_bank, dict) and existing_bank:
+        if not isinstance(existing_bank, dict):
+            existing_bank = {}
+            state["generated_question_bank"] = existing_bank
+
+        if isinstance(existing_bank.get(stage), list) and existing_bank.get(stage):
             return
 
         db = next(get_db())
         ltm = LongTermMemory(db)
 
-        bank_key = self._generated_bank_cache_key(role)
         checklist_key = self._generated_checklist_cache_key(role)
-        research_key = self._role_research_cache_key(role)
+        bank_key = self._generated_bank_cache_key(role, stage)
+        research_key = self._role_research_cache_key(role, stage)
 
         cached_bank = ltm.get_memory(state["user_id"], "onboarding_generated", bank_key)
         cached_checklist = ltm.get_memory(state["user_id"], "onboarding_generated", checklist_key)
         cached_research = ltm.get_memory(state["user_id"], "onboarding_generated", research_key)
 
-        if isinstance(cached_bank, dict) and cached_bank:
-            state["generated_question_bank"] = cached_bank
+        if isinstance(cached_bank, list) and cached_bank:
+            existing_bank[stage] = cached_bank
             if isinstance(cached_checklist, list):
                 state["onboarding_checklist"] = cached_checklist
             if isinstance(cached_research, dict):
-                state["role_research"] = cached_research
+                role_research = state.get("role_research")
+                if not isinstance(role_research, dict):
+                    role_research = {}
+                role_research[stage] = cached_research
+                state["role_research"] = role_research
             return
 
         provider = str(getattr(settings, "WEB_SEARCH_PROVIDER", "tavily") or "tavily").strip().lower()
@@ -377,38 +402,46 @@ Rules:
         search_error = None
         if provider == "tavily":
             try:
-                research_results = self._tavily_search(f"{role} onboarding checklist questions", max_results=6)
+                research_results = self._tavily_search(f"{role} onboarding questions {stage}", max_results=6)
             except Exception as e:
                 search_error = str(e)
                 logger.warning(f"Web search failed: {e}")
+                raise RuntimeError(search_error or "Tavily web search failed") from e
+        else:
+            raise RuntimeError(f"Unsupported WEB_SEARCH_PROVIDER: {provider}")
 
         try:
-            generated_payload = self._generate_role_question_bank_from_research(role=role, research_results=research_results)
+            generated_payload = self._generate_role_question_bank_from_research(role=role, stage=stage, research_results=research_results)
         except Exception as e:
-            # Don't break onboarding if optional question generation fails.
-            logger.warning(f"Question bank generation failed; using static role questions: {e}")
-            return
+            logger.warning(f"Question bank generation failed: {e}")
+            raise
 
-        generated_bank = generated_payload.get("generated_question_bank")
+        stage_questions = generated_payload.get("questions")
         generated_checklist = generated_payload.get("onboarding_checklist")
-        if not isinstance(generated_bank, dict):
-            raise RuntimeError("generated_question_bank missing from generation payload")
 
-        state["generated_question_bank"] = generated_bank
+        if not isinstance(stage_questions, list) or not stage_questions:
+            raise RuntimeError("questions missing from generation payload")
+
+        existing_bank[stage] = stage_questions
         state["onboarding_checklist"] = generated_checklist if isinstance(generated_checklist, list) else []
-        state["role_research"] = {
+
+        role_research = state.get("role_research")
+        if not isinstance(role_research, dict):
+            role_research = {}
+        role_research[stage] = {
             "provider": provider,
-            "query": f"{role} onboarding checklist questions",
+            "query": f"{role} onboarding questions {stage}",
             "results": research_results,
             "generated_at": datetime.utcnow().isoformat(),
             "error": search_error,
         }
+        state["role_research"] = role_research
 
         ltm.save_memory(
             user_id=state["user_id"],
             memory_type="onboarding_generated",
             key=bank_key,
-            value=generated_bank,
+            value=stage_questions,
             importance=3,
         )
         ltm.save_memory(
@@ -422,7 +455,7 @@ Rules:
             user_id=state["user_id"],
             memory_type="onboarding_generated",
             key=research_key,
-            value=state["role_research"],
+            value=role_research.get(stage),
             importance=2,
         )
 
@@ -475,7 +508,7 @@ Rules:
         self.rag = AgenticRAG()
         self.short_term_memory = ShortTermMemory()
         self.llm = ChatGoogleGenerativeAI(
-            model="gemini-2.0-flash-exp",
+            model=str(getattr(settings, "gemini_model_id", None) or getattr(settings, "GEMINI_MODEL", "gemini-1.5-flash-latest") or "gemini-1.5-flash-latest"),
             google_api_key=settings.GOOGLE_API_KEY,
             temperature=0.7
         )
@@ -565,20 +598,30 @@ Rules:
 
             role_value = onboarding_facts.get("welcome.role")
             if role_value:
-                bank_key = self._generated_bank_cache_key(role_value)
                 checklist_key = self._generated_checklist_cache_key(role_value)
-                research_key = self._role_research_cache_key(role_value)
-
-                cached_bank = ltm.get_memory(state["user_id"], "onboarding_generated", bank_key)
+                cached_bank = None
                 cached_checklist = ltm.get_memory(state["user_id"], "onboarding_generated", checklist_key)
-                cached_research = ltm.get_memory(state["user_id"], "onboarding_generated", research_key)
+                cached_research = None
 
-                if isinstance(cached_bank, dict):
-                    state["generated_question_bank"] = cached_bank
+                # Per-stage caches: attempt to load any stage question lists already generated.
+                stage_banks: Dict[str, Any] = {}
+                stage_research: Dict[str, Any] = {}
+                for stage_key in ["profile_setup", "learning_preferences", "first_steps"]:
+                    bank_key = self._generated_bank_cache_key(role_value, stage_key)
+                    research_key = self._role_research_cache_key(role_value, stage_key)
+                    cached_bank = ltm.get_memory(state["user_id"], "onboarding_generated", bank_key)
+                    cached_research = ltm.get_memory(state["user_id"], "onboarding_generated", research_key)
+                    if isinstance(cached_bank, list) and cached_bank:
+                        stage_banks[stage_key] = cached_bank
+                    if isinstance(cached_research, dict) and cached_research:
+                        stage_research[stage_key] = cached_research
+
+                if stage_banks:
+                    state["generated_question_bank"] = stage_banks
                 if isinstance(cached_checklist, list):
                     state["onboarding_checklist"] = cached_checklist
-                if isinstance(cached_research, dict):
-                    state["role_research"] = cached_research
+                if stage_research:
+                    state["role_research"] = stage_research
             
             logger.info(f"Loaded {len(recent_messages)} recent messages and {len(important_memories)} memories")
             
@@ -587,6 +630,104 @@ Rules:
             state["short_term_context"] = {"recent_messages": [], "message_count": 0}
             state["long_term_memories"] = []
         
+        return state
+
+    # ------------------------------------------------------------------
+    # Q&A helper: answer from RAG docs with a smart fallback
+    # ------------------------------------------------------------------
+    def _handle_qa_question(
+        self,
+        state: OnboardingAgentState,
+        current_stage: str,
+        onboarding_facts: dict,
+    ) -> OnboardingAgentState:
+        """Answer a user question during the post-stage Q&A pause.
+
+        1. Retrieve documents from the RAG knowledge base.
+        2. If high-relevance docs are found, use the LLM to synthesise an
+           answer grounded in those documents.
+        3. If no relevant docs are found (or scores are too low), return a
+           friendly fallback that tells the user *who* to contact for help.
+        """
+        user_question = str(state.get("user_input") or "").strip()
+        logger.info(f"Q&A mode – answering question: {user_question[:120]}")
+
+        # --- 1. Retrieve from RAG ---
+        MIN_RELEVANCE_SCORE = 0.35
+        try:
+            rag_result = self.rag.retrieve(
+                query=user_question,
+                current_stage=current_stage,
+                top_k=5,
+                use_reranking=True,
+            )
+            docs = rag_result.get("documents") or []
+            # Keep only docs above the relevance threshold
+            relevant_docs = [
+                d for d in docs
+                if d.metadata.get("score", 0.0) >= MIN_RELEVANCE_SCORE
+            ]
+        except Exception as e:
+            logger.error(f"RAG retrieval failed in Q&A mode: {e}")
+            relevant_docs = []
+
+        # --- 2. If we have relevant docs, ask the LLM to answer ---
+        if relevant_docs:
+            context_str = self.rag.get_context_string(relevant_docs)
+            qa_system_prompt = (
+                "You are a helpful onboarding assistant for TechVenture Solutions.\n"
+                "The newcomer has a question. Answer it using ONLY the company documents below.\n"
+                "Be concise (3-5 sentences). If the documents don't fully cover the question, "
+                "say so honestly and suggest who to contact.\n"
+                "After your answer, remind the user they can ask more questions or say "
+                "**'move on'** to continue onboarding.\n\n"
+                f"--- Company Documents ---\n{context_str}\n---"
+            )
+            try:
+                messages = [
+                    SystemMessage(content=qa_system_prompt),
+                    HumanMessage(content=user_question),
+                ]
+                llm_response = self.llm.invoke(messages)
+                answer = (llm_response.content or "").strip()
+                if not answer:
+                    raise ValueError("Empty LLM response")
+            except Exception as e:
+                logger.error(f"LLM failed in Q&A mode: {e}")
+                answer = None
+
+            if answer:
+                state["response"] = answer
+                state["next_stage"] = None
+                state["extracted_facts"] = {}
+                state["onboarding_facts"] = onboarding_facts
+                # Expose sources so the UI can show them
+                sources = []
+                for doc in relevant_docs:
+                    sources.append({
+                        "source": doc.metadata.get("source", "unknown"),
+                        "category": doc.metadata.get("category", "general"),
+                        "score": doc.metadata.get("score", 0.0),
+                        "preview": doc.page_content[:150] + "...",
+                        "file_name": doc.metadata.get("file_name", ""),
+                        "upload_id": doc.metadata.get("upload_id", ""),
+                    })
+                state["sources"] = sources
+                return state
+
+        # --- 3. Fallback: no relevant docs found ---
+        contact = self._QA_DEFAULT_CONTACT
+        question_lower = user_question.lower()
+        for keyword, dept in self._QA_FALLBACK_CONTACTS.items():
+            if keyword in question_lower:
+                contact = dept
+                break
+
+        state["response"] = self._QA_DEFAULT_FALLBACK.format(contact=contact)
+        state["next_stage"] = None
+        state["extracted_facts"] = {}
+        state["onboarding_facts"] = onboarding_facts
+        state["sources"] = []
         return state
     
     def retrieve_context(self, state: OnboardingAgentState) -> OnboardingAgentState:
@@ -624,7 +765,9 @@ Rules:
                     "source": doc.metadata.get("source", "unknown"),
                     "category": doc.metadata.get("category", "general"),
                     "score": doc.metadata.get("score", 0.0),
-                    "preview": doc.page_content[:150] + "..."
+                    "preview": doc.page_content[:150] + "...",
+                    "file_name": doc.metadata.get("file_name", ""),
+                    "upload_id": doc.metadata.get("upload_id", ""),
                 })
             
             state["sources"] = sources
@@ -654,8 +797,99 @@ Rules:
         try:
             current_stage = self._normalize_stage_key(state.get("current_stage"))
             onboarding_facts = dict(state.get("onboarding_facts") or {})
+
+            qa_pending_stage = str(onboarding_facts.get("qa.pending_stage") or "").strip()
+            user_text = str(state.get("user_input") or "").strip()
+            user_low = user_text.lower()
+            user_wants_move_on = any(
+                phrase in user_low
+                for phrase in [
+                    "move on",
+                    "next stage",
+                    "continue",
+                    "go next",
+                    "proceed",
+                    "lets move on",
+                    "let's move on",
+                    "ok move on",
+                    "yes move on",
+                    "no questions",
+                    "no, let's move on",
+                    "no lets move on",
+                    "nope",
+                    "i'm good",
+                    "im good",
+                    "all good",
+                    "no thanks",
+                ]
+            ) or (qa_pending_stage and user_low.strip() in ("no", "no."))
             if current_stage != "welcome":
-                self._ensure_generated_question_bank(state)
+                try:
+                    self._ensure_generated_question_bank(state, current_stage)
+                except Exception as e:
+                    state["response"] = (
+                        "I can't generate role-based onboarding questions right now because the web-search/question-generation "
+                        f"step failed: {type(e).__name__}: {e}\n\n"
+                        "Please check:\n"
+                        "- TAVILY_API_KEY is set\n"
+                        "- GOOGLE_API_KEY is set\n"
+                        "- GEMINI_MODEL is valid (e.g. models/gemini-2.0-flash)\n"
+                        "Then restart the app and click '🔄 New Session'."
+                    )
+                    state["next_stage"] = None
+                    state["extracted_facts"] = {}
+                    state["onboarding_facts"] = onboarding_facts
+                    return state
+
+            # If the user is in the post-stage Q&A mode for the current stage, only move on when they confirm.
+            if qa_pending_stage and qa_pending_stage == current_stage:
+                if user_wants_move_on:
+                    # Clear the pending stage and advance.
+                    state["extracted_facts"] = {"qa.pending_stage": ""}
+                    onboarding_facts["qa.pending_stage"] = ""
+                    state["onboarding_facts"] = onboarding_facts
+
+                    next_stage = self._next_stage_for(current_stage)
+                    if next_stage and next_stage != "completed":
+                        state["next_stage"] = next_stage
+                        try:
+                            self._ensure_generated_question_bank(state, next_stage)
+                        except Exception as e:
+                            state["response"] = (
+                                "I can't generate role-based onboarding questions for the next stage because the web-search/question-generation "
+                                f"step failed: {type(e).__name__}: {e}\n\n"
+                                "Please check:\n"
+                                "- TAVILY_API_KEY is set\n"
+                                "- GOOGLE_API_KEY is set\n"
+                                "- GEMINI_MODEL is valid (e.g. models/gemini-2.0-flash)"
+                            )
+                            return state
+
+                        next_stage_missing = self._missing_fields(
+                            next_stage,
+                            onboarding_facts,
+                            generated_question_bank=state.get("generated_question_bank"),
+                        )
+                        if next_stage_missing:
+                            stage_intro = self._STAGE_INTRODUCTIONS.get(next_stage, "")
+                            next_question = next_stage_missing[0][1]
+                            state["response"] = f"{stage_intro}\n\n{next_question}".strip() if stage_intro else next_question
+                        else:
+                            state["response"] = "Moving to the next stage."
+                        return state
+
+                    state["next_stage"] = "completed"
+                    state["response"] = self._STAGE_INTRODUCTIONS.get("completed", "Congratulations! You've completed onboarding.")
+                    return state
+
+                # User is asking a question in Q&A mode — answer from RAG docs with fallback.
+                return self._handle_qa_question(state, current_stage, onboarding_facts)
+
+            # If qa_pending_stage is set for a DIFFERENT stage (edge case), clear it.
+            if qa_pending_stage and qa_pending_stage != current_stage:
+                onboarding_facts["qa.pending_stage"] = ""
+                state["onboarding_facts"] = onboarding_facts
+                state["extracted_facts"] = {"qa.pending_stage": ""}
 
             missing_before = self._missing_fields(
                 current_stage,
@@ -678,18 +912,43 @@ Rules:
                 completed_stages = []
                 first_missing = None
                 
-                for check_stage in ["welcome", "profile_setup", "learning_preferences", "first_steps"]:
-                    if check_stage != "welcome":
-                        self._ensure_generated_question_bank(state)
-                    missing = self._missing_fields(
-                        check_stage,
-                        onboarding_facts,
-                        generated_question_bank=state.get("generated_question_bank"),
-                    )
-                    if not missing:
-                        completed_stages.append(stage_names[check_stage])
-                    elif not first_missing:
-                        first_missing = (check_stage, missing[0][0], missing[0][1])
+                # If welcome isn't complete yet (name/role missing), don't attempt to evaluate later stages.
+                welcome_missing = self._missing_fields(
+                    "welcome",
+                    onboarding_facts,
+                    generated_question_bank=state.get("generated_question_bank"),
+                )
+                if welcome_missing:
+                    first_missing = ("welcome", welcome_missing[0][0], welcome_missing[0][1])
+                else:
+                
+                    for check_stage in ["welcome", "profile_setup", "learning_preferences", "first_steps"]:
+                        if check_stage != "welcome":
+                            try:
+                                self._ensure_generated_question_bank(state, check_stage)
+                            except Exception as e:
+                                state["response"] = (
+                                    "I can't generate the onboarding question bank right now because the web-search/question-generation "
+                                    f"step failed: {type(e).__name__}: {e}\n\n"
+                                    "Please check:\n"
+                                    "- TAVILY_API_KEY is set\n"
+                                    "- GOOGLE_API_KEY is set\n"
+                                    "- GEMINI_MODEL is valid (e.g. models/gemini-2.0-flash)\n"
+                                    "Then restart the app and click '🔄 New Session'."
+                                )
+                                state["next_stage"] = None
+                                state["extracted_facts"] = {}
+                                state["onboarding_facts"] = onboarding_facts
+                                return state
+                        missing = self._missing_fields(
+                            check_stage,
+                            onboarding_facts,
+                            generated_question_bank=state.get("generated_question_bank"),
+                        )
+                        if not missing:
+                            completed_stages.append(stage_names[check_stage])
+                        elif not first_missing:
+                            first_missing = (check_stage, missing[0][0], missing[0][1])
                 
                 response_parts = []
                 
@@ -730,6 +989,10 @@ Rules:
                         answer = self._deduplicate_name(answer)
                     namespaced_key = f"{current_stage}.{current_field_key}"
                     namespaced_extracted = {namespaced_key: answer}
+                    # Store the question text so the PDF summary can show it
+                    # instead of raw field keys like "Q1", "Q2", etc.
+                    qlabel_key = f"{current_stage}._qlabel.{current_field_key}"
+                    namespaced_extracted[qlabel_key] = current_question
                     state["extracted_facts"] = namespaced_extracted
 
                     known_name = None
@@ -747,30 +1010,16 @@ Rules:
                         generated_question_bank=state.get("generated_question_bank"),
                     )
                     if len(remaining) == 0:
-                        # Current stage complete - move to next stage
-                        next_stage = self._next_stage_for(current_stage)
-                        if next_stage and next_stage != "completed":
-                            state["next_stage"] = next_stage
-                            # Get first question of next stage
-                            next_stage_missing = self._missing_fields(
-                                next_stage,
-                                onboarding_facts,
-                                generated_question_bank=state.get("generated_question_bank"),
-                            )
-                            if next_stage_missing:
-                                next_question = next_stage_missing[0][1]
-                                stage_intro = self._STAGE_INTRODUCTIONS.get(next_stage, "")
-                                ack = f"Thanks, {known_name}!" if known_name and current_stage == "welcome" and current_field_key == "name" else "Got it!"
-                                if stage_intro:
-                                    state["response"] = f"{ack}\n\n{stage_intro}\n\n{next_question}"
-                                else:
-                                    state["response"] = f"{ack}\n\n{next_question}"
-                            else:
-                                state["response"] = "Got it! Moving to the next stage."
-                        else:
-                            # Onboarding complete
-                            state["next_stage"] = "completed"
-                            state["response"] = "Got it!\n\n" + self._STAGE_INTRODUCTIONS.get("completed", "Congratulations! You've completed onboarding.")
+                        # Stage complete -> enter Q&A mode instead of auto-advancing.
+                        ack = f"Thanks, {known_name}!" if known_name and current_stage == "welcome" and current_field_key == "name" else "Got it!"
+                        qa_prompt = self._STAGE_QA_PROMPTS.get(
+                            current_stage,
+                            "Do you have any questions about this stage? I can look up answers from our company documents. When you're ready, say **'move on'** to continue."
+                        )
+                        state["response"] = f"{ack}\n\n{qa_prompt}"
+                        state["next_stage"] = None
+                        namespaced_extracted["qa.pending_stage"] = current_stage
+                        state["extracted_facts"] = namespaced_extracted
                     else:
                         state["next_stage"] = None
                         next_question = remaining[0][1]
@@ -795,7 +1044,7 @@ Our mission is to eliminate busywork so teams can focus on what matters most.
 YOUR ROLE:
 You're here to welcome newcomers, help them feel at home, and learn about them so we can personalize their experience. Share relevant company info naturally as you chat — don't just ask questions, have a real conversation!
 
-When acknowledging their answers, share something relevant about TechVenture that connects to what they said.
+When acknowledging their answers, share something relevant about TechVenture Solutions that connects to what they said.
 """,
                 "profile_setup": """You are helping the user build their profile at TechVenture Solutions.
 
@@ -806,12 +1055,12 @@ WHY PROFILES MATTER:
 - Your timezone helps schedule meetings and set working hours
 
 COMPANY CULTURE:
-At TechVenture, we believe in transparency and collaboration. Profiles are visible to teammates to foster connection. We support remote, hybrid, and office work arrangements across all timezones.
+At TechVenture Solutions, we believe in transparency and collaboration. Profiles are visible to teammates to foster connection. We support remote, hybrid, and office work arrangements across all timezones.
 
 YOUR ROLE:
 Guide them through profile setup while explaining how each piece of information helps them and their team. Make it feel valuable, not bureaucratic.
 """,
-                "learning_preferences": """You are learning how the user works best to customize their TechVenture experience.
+                "learning_preferences": """You are learning how the user works best to customize their TechVenture Solutions experience.
 
 WHAT WE CAN CUSTOMIZE:
 - **Dashboard layout**: Focus on what matters most to you
@@ -826,13 +1075,13 @@ COMMON CHALLENGES WE SOLVE:
 - Difficulty tracking who's working on what
 
 YOUR ROLE:
-Understand their workflow, challenges, and preferences. Share how TechVenture features can address their specific pain points. Make recommendations based on what they tell you.
+Understand their workflow, challenges, and preferences. Share how TechVenture Solutions features can address their specific pain points. Make recommendations based on what they tell you.
 """,
-                "first_steps": """You are helping the user take their first real actions in TechVenture.
+                "first_steps": """You are helping the user take their first real actions in TechVenture Solutions.
 
 GETTING STARTED OPTIONS:
 - **Create a project**: Set up your first project with tasks and milestones
-- **Invite teammates**: Bring your team into TechVenture
+- **Invite teammates**: Bring your team into TechVenture Solutions
 - **Explore templates**: Use pre-built templates for common workflows
 - **Set up integrations**: Connect Slack, calendar, or other tools
 - **Take a quick tour**: 5-minute interactive walkthrough
@@ -850,7 +1099,7 @@ Help them take meaningful first steps. Offer guidance based on their role and go
 
 WHAT'S NEXT:
 - Explore advanced features like automation and custom workflows
-- Join the TechVenture community for tips and networking
+- Join the TechVenture Solutions community for tips and networking
 - Check out the weekly webinars on productivity and collaboration
 - Reach out anytime — I'm here to help with questions big or small
 
@@ -861,7 +1110,7 @@ ADVANCED FEATURES TO EXPLORE:
 - API access for custom integrations
 
 YOUR ROLE:
-Congratulate them warmly! Offer ongoing support and suggest next steps based on their role and interests. Make them feel like part of the TechVenture community.
+Congratulate them warmly! Offer ongoing support and suggest next steps based on their role and interests. Make them feel like part of the TechVenture Solutions community.
 """
             }
             
@@ -961,6 +1210,10 @@ Rules:
                     if fallback_value:
                         namespaced_extracted[key] = fallback_value
 
+            # Store the question text so the PDF summary can show it
+            if current_field_key and current_question and namespaced_extracted:
+                qlabel_key = f"{current_stage}._qlabel.{current_field_key}"
+                namespaced_extracted[qlabel_key] = current_question
             state["extracted_facts"] = namespaced_extracted
 
             known_name = None
@@ -999,35 +1252,54 @@ Rules:
                     base = (state.get("response") or "").strip()
                     if guidance:
                         base = f"{base}\n\n{guidance}".strip() if base else guidance
-                    
-                    # Move to next stage automatically
-                    next_stage = self._next_stage_for(current_stage)
-                    if next_stage and next_stage != "completed":
-                        state["next_stage"] = next_stage
-                        # Get first question of next stage
-                        next_stage_missing = self._missing_fields(
-                            next_stage,
-                            onboarding_facts,
-                            generated_question_bank=state.get("generated_question_bank"),
-                        )
-                        if next_stage_missing:
-                            next_question = next_stage_missing[0][1]
-                            stage_intro = self._STAGE_INTRODUCTIONS.get(next_stage, "")
-                            if stage_intro:
-                                state["response"] = f"{base}\n\n{stage_intro}\n\n{next_question}".strip() if base else f"{stage_intro}\n\n{next_question}"
-                            else:
-                                state["response"] = f"{base}\n\n{next_question}".strip() if base else next_question
-                        else:
-                            state["response"] = f"{base}\n\nMoving to the next stage.".strip() if base else "Moving to the next stage."
-                    else:
-                        # Onboarding complete
-                        state["next_stage"] = "completed"
-                        completion_intro = self._STAGE_INTRODUCTIONS.get("completed", "Congratulations! You've completed onboarding.")
-                        state["response"] = f"{base}\n\n{completion_intro}".strip() if base else completion_intro
-                else:
-                    # Stage was already complete, just provide a helpful message
-                    state["response"] = "This stage is already complete. You can ask me questions about TechVenture Solutions, or I can help you with the next stage."
+
+                    # Stage complete -> enter Q&A mode instead of auto-advancing.
                     state["next_stage"] = None
+                    qa_prompt = self._STAGE_QA_PROMPTS.get(
+                        current_stage,
+                        "Do you have any questions about this stage? I can look up answers from our company documents. When you're ready, say **'move on'** to continue."
+                    )
+                    state["response"] = f"{base}\n\n{qa_prompt}".strip() if base else qa_prompt
+
+                    # Persist the Q&A pending stage so it survives reruns.
+                    namespaced_extracted["qa.pending_stage"] = current_stage
+                    state["extracted_facts"] = namespaced_extracted
+                else:
+                    # Stage was already complete. If the user is asking a question, answer
+                    # it from RAG docs instead of returning a canned message.
+                    _text = str(state.get("user_input") or "").strip().lower()
+                    _is_question = (
+                        "?" in _text
+                        or _text.startswith("what ")
+                        or _text.startswith("why ")
+                        or _text.startswith("how ")
+                        or _text.startswith("when ")
+                        or _text.startswith("where ")
+                        or _text.startswith("who ")
+                        or _text.startswith("can you ")
+                        or _text.startswith("should i ")
+                        or _text.startswith("tell me ")
+                        or _text.startswith("explain ")
+                        or _text.startswith("describe ")
+                        or _text.startswith("do we ")
+                        or _text.startswith("do i ")
+                        or _text.startswith("is there ")
+                        or _text.startswith("are there ")
+                        or "policy" in _text
+                        or "procedure" in _text
+                        or "rule" in _text
+                        or "guideline" in _text
+                        or "about " in _text
+                        or "work from home" in _text
+                        or "remote work" in _text
+                    )
+                    if _is_question:
+                        return self._handle_qa_question(state, current_stage, onboarding_facts)
+                    else:
+                        state["response"] = "This stage is already complete. You can ask me questions about TechVenture Solutions, or I can help you with the next stage."
+                        state["next_stage"] = None
+                        logger.info("Stage complete message returned (input did not look like a question)")
+                        return state
             else:
                 state["next_stage"] = None
 
@@ -1111,13 +1383,16 @@ Rules:
                 research = state.get("role_research")
 
                 if isinstance(bank, dict) and bank:
-                    ltm.save_memory(
-                        user_id=state["user_id"],
-                        memory_type="onboarding_generated",
-                        key=self._generated_bank_cache_key(role_value),
-                        value=bank,
-                        importance=3,
-                    )
+                    for stage_key, stage_questions in bank.items():
+                        if not isinstance(stage_questions, list) or not stage_questions:
+                            continue
+                        ltm.save_memory(
+                            user_id=state["user_id"],
+                            memory_type="onboarding_generated",
+                            key=self._generated_bank_cache_key(role_value, stage_key),
+                            value=stage_questions,
+                            importance=3,
+                        )
                 if isinstance(checklist, list) and checklist:
                     ltm.save_memory(
                         user_id=state["user_id"],
@@ -1127,13 +1402,16 @@ Rules:
                         importance=3,
                     )
                 if isinstance(research, dict) and research:
-                    ltm.save_memory(
-                        user_id=state["user_id"],
-                        memory_type="onboarding_generated",
-                        key=self._role_research_cache_key(role_value),
-                        value=research,
-                        importance=2,
-                    )
+                    for stage_key, stage_research in research.items():
+                        if not isinstance(stage_research, dict) or not stage_research:
+                            continue
+                        ltm.save_memory(
+                            user_id=state["user_id"],
+                            memory_type="onboarding_generated",
+                            key=self._role_research_cache_key(role_value, stage_key),
+                            value=stage_research,
+                            importance=2,
+                        )
             
             logger.info("Saved conversation to memory")
             
