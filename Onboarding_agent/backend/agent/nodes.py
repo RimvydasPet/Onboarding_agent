@@ -34,6 +34,59 @@ class AgentNodes:
 
     _STAGE_ORDER = ["welcome", "profile_setup", "learning_preferences", "first_steps", "completed"]
 
+    _STAGE_QA_PROMPTS: Dict[str, str] = {
+        "welcome": (
+            "Before we move on — do you have any questions about TechVenture Solutions or the onboarding process? "
+            "I can look up answers from our company documents. If you're all set, just say **'move on'** and we'll continue!"
+        ),
+        "profile_setup": (
+            "That wraps up your profile setup! Do you have any questions about your profile, team visibility, "
+            "or how your information is used at TechVenture Solutions? I'll check our company docs for you. "
+            "Otherwise, say **'move on'** to proceed."
+        ),
+        "learning_preferences": (
+            "Great, your learning preferences are all set! Any questions about integrations, notifications, "
+            "or how we'll customize your experience? I can search our knowledge base for answers. "
+            "When you're ready, say **'move on'** to continue."
+        ),
+        "first_steps": (
+            "Awesome — your first steps are mapped out! Do you have any questions about getting started, "
+            "access, or anything else? I'll look through our company documents to help. "
+            "Say **'move on'** when you're ready to wrap up."
+        ),
+    }
+
+    _QA_FALLBACK_CONTACTS: Dict[str, str] = {
+        "it": "the **IT Help Desk** (helpdesk@techventure.com)",
+        "access": "the **IT Help Desk** (helpdesk@techventure.com)",
+        "permission": "the **IT Help Desk** (helpdesk@techventure.com)",
+        "security": "the **Security Team** (security@techventure.com)",
+        "password": "the **IT Help Desk** (helpdesk@techventure.com)",
+        "hr": "the **HR Department** (hr@techventure.com)",
+        "leave": "the **HR Department** (hr@techventure.com)",
+        "vacation": "the **HR Department** (hr@techventure.com)",
+        "salary": "the **HR Department** (hr@techventure.com)",
+        "benefit": "the **HR Department** (hr@techventure.com)",
+        "payroll": "the **HR Department** (hr@techventure.com)",
+        "contract": "the **HR Department** (hr@techventure.com)",
+        "expense": "the **Finance Team** (finance@techventure.com)",
+        "travel": "the **Finance Team** (finance@techventure.com)",
+        "reimbursement": "the **Finance Team** (finance@techventure.com)",
+        "billing": "the **Finance Team** (finance@techventure.com)",
+        "manager": "your **direct manager**",
+        "team": "your **direct manager**",
+        "project": "your **project lead or direct manager**",
+    }
+
+    _QA_DEFAULT_FALLBACK = (
+        "I wasn't able to find a specific answer in our company documents. "
+        "For more details, I'd recommend reaching out to {contact}. "
+        "They'll be happy to help!\n\n"
+        "Do you have any other questions, or shall we **move on**?"
+    )
+
+    _QA_DEFAULT_CONTACT = "your **direct manager** or the **HR Department** (hr@techventure.com)"
+
     _STAGE_INTRODUCTIONS: Dict[str, str] = {
         "profile_setup": (
             "🎯 **Profile Setup**\n\n"
@@ -578,6 +631,104 @@ Rules:
             state["long_term_memories"] = []
         
         return state
+
+    # ------------------------------------------------------------------
+    # Q&A helper: answer from RAG docs with a smart fallback
+    # ------------------------------------------------------------------
+    def _handle_qa_question(
+        self,
+        state: OnboardingAgentState,
+        current_stage: str,
+        onboarding_facts: dict,
+    ) -> OnboardingAgentState:
+        """Answer a user question during the post-stage Q&A pause.
+
+        1. Retrieve documents from the RAG knowledge base.
+        2. If high-relevance docs are found, use the LLM to synthesise an
+           answer grounded in those documents.
+        3. If no relevant docs are found (or scores are too low), return a
+           friendly fallback that tells the user *who* to contact for help.
+        """
+        user_question = str(state.get("user_input") or "").strip()
+        logger.info(f"Q&A mode – answering question: {user_question[:120]}")
+
+        # --- 1. Retrieve from RAG ---
+        MIN_RELEVANCE_SCORE = 0.35
+        try:
+            rag_result = self.rag.retrieve(
+                query=user_question,
+                current_stage=current_stage,
+                top_k=5,
+                use_reranking=True,
+            )
+            docs = rag_result.get("documents") or []
+            # Keep only docs above the relevance threshold
+            relevant_docs = [
+                d for d in docs
+                if d.metadata.get("score", 0.0) >= MIN_RELEVANCE_SCORE
+            ]
+        except Exception as e:
+            logger.error(f"RAG retrieval failed in Q&A mode: {e}")
+            relevant_docs = []
+
+        # --- 2. If we have relevant docs, ask the LLM to answer ---
+        if relevant_docs:
+            context_str = self.rag.get_context_string(relevant_docs)
+            qa_system_prompt = (
+                "You are a helpful onboarding assistant for TechVenture Solutions.\n"
+                "The newcomer has a question. Answer it using ONLY the company documents below.\n"
+                "Be concise (3-5 sentences). If the documents don't fully cover the question, "
+                "say so honestly and suggest who to contact.\n"
+                "After your answer, remind the user they can ask more questions or say "
+                "**'move on'** to continue onboarding.\n\n"
+                f"--- Company Documents ---\n{context_str}\n---"
+            )
+            try:
+                messages = [
+                    SystemMessage(content=qa_system_prompt),
+                    HumanMessage(content=user_question),
+                ]
+                llm_response = self.llm.invoke(messages)
+                answer = (llm_response.content or "").strip()
+                if not answer:
+                    raise ValueError("Empty LLM response")
+            except Exception as e:
+                logger.error(f"LLM failed in Q&A mode: {e}")
+                answer = None
+
+            if answer:
+                state["response"] = answer
+                state["next_stage"] = None
+                state["extracted_facts"] = {}
+                state["onboarding_facts"] = onboarding_facts
+                # Expose sources so the UI can show them
+                sources = []
+                for doc in relevant_docs:
+                    sources.append({
+                        "source": doc.metadata.get("source", "unknown"),
+                        "category": doc.metadata.get("category", "general"),
+                        "score": doc.metadata.get("score", 0.0),
+                        "preview": doc.page_content[:150] + "...",
+                        "file_name": doc.metadata.get("file_name", ""),
+                        "upload_id": doc.metadata.get("upload_id", ""),
+                    })
+                state["sources"] = sources
+                return state
+
+        # --- 3. Fallback: no relevant docs found ---
+        contact = self._QA_DEFAULT_CONTACT
+        question_lower = user_question.lower()
+        for keyword, dept in self._QA_FALLBACK_CONTACTS.items():
+            if keyword in question_lower:
+                contact = dept
+                break
+
+        state["response"] = self._QA_DEFAULT_FALLBACK.format(contact=contact)
+        state["next_stage"] = None
+        state["extracted_facts"] = {}
+        state["onboarding_facts"] = onboarding_facts
+        state["sources"] = []
+        return state
     
     def retrieve_context(self, state: OnboardingAgentState) -> OnboardingAgentState:
         """
@@ -614,7 +765,9 @@ Rules:
                     "source": doc.metadata.get("source", "unknown"),
                     "category": doc.metadata.get("category", "general"),
                     "score": doc.metadata.get("score", 0.0),
-                    "preview": doc.page_content[:150] + "..."
+                    "preview": doc.page_content[:150] + "...",
+                    "file_name": doc.metadata.get("file_name", ""),
+                    "upload_id": doc.metadata.get("upload_id", ""),
                 })
             
             state["sources"] = sources
@@ -660,8 +813,16 @@ Rules:
                     "let's move on",
                     "ok move on",
                     "yes move on",
+                    "no questions",
+                    "no, let's move on",
+                    "no lets move on",
+                    "nope",
+                    "i'm good",
+                    "im good",
+                    "all good",
+                    "no thanks",
                 ]
-            )
+            ) or (qa_pending_stage and user_low.strip() in ("no", "no."))
             if current_stage != "welcome":
                 try:
                     self._ensure_generated_question_bank(state, current_stage)
@@ -721,7 +882,14 @@ Rules:
                     state["response"] = self._STAGE_INTRODUCTIONS.get("completed", "Congratulations! You've completed onboarding.")
                     return state
 
-                # If they didn't explicitly confirm moving on, allow Q&A via the normal RAG+LLM path below.
+                # User is asking a question in Q&A mode — answer from RAG docs with fallback.
+                return self._handle_qa_question(state, current_stage, onboarding_facts)
+
+            # If qa_pending_stage is set for a DIFFERENT stage (edge case), clear it.
+            if qa_pending_stage and qa_pending_stage != current_stage:
+                onboarding_facts["qa.pending_stage"] = ""
+                state["onboarding_facts"] = onboarding_facts
+                state["extracted_facts"] = {"qa.pending_stage": ""}
 
             missing_before = self._missing_fields(
                 current_stage,
@@ -821,6 +989,10 @@ Rules:
                         answer = self._deduplicate_name(answer)
                     namespaced_key = f"{current_stage}.{current_field_key}"
                     namespaced_extracted = {namespaced_key: answer}
+                    # Store the question text so the PDF summary can show it
+                    # instead of raw field keys like "Q1", "Q2", etc.
+                    qlabel_key = f"{current_stage}._qlabel.{current_field_key}"
+                    namespaced_extracted[qlabel_key] = current_question
                     state["extracted_facts"] = namespaced_extracted
 
                     known_name = None
@@ -838,42 +1010,16 @@ Rules:
                         generated_question_bank=state.get("generated_question_bank"),
                     )
                     if len(remaining) == 0:
-                        # Current stage complete - move to next stage
-                        next_stage = self._next_stage_for(current_stage)
-                        if next_stage and next_stage != "completed":
-                            state["next_stage"] = next_stage
-                            try:
-                                self._ensure_generated_question_bank(state, next_stage)
-                            except Exception as e:
-                                state["response"] = (
-                                    "I can't generate role-based onboarding questions for the next stage because the web-search/question-generation "
-                                    f"step failed: {type(e).__name__}: {e}\n\n"
-                                    "Please check:\n"
-                                    "- TAVILY_API_KEY is set\n"
-                                    "- GOOGLE_API_KEY is set\n"
-                                    "- GEMINI_MODEL is valid (e.g. models/gemini-2.0-flash)"
-                                )
-                                return state
-                            # Get first question of next stage
-                            next_stage_missing = self._missing_fields(
-                                next_stage,
-                                onboarding_facts,
-                                generated_question_bank=state.get("generated_question_bank"),
-                            )
-                            if next_stage_missing:
-                                next_question = next_stage_missing[0][1]
-                                stage_intro = self._STAGE_INTRODUCTIONS.get(next_stage, "")
-                                ack = f"Thanks, {known_name}!" if known_name and current_stage == "welcome" and current_field_key == "name" else "Got it!"
-                                if stage_intro:
-                                    state["response"] = f"{ack}\n\n{stage_intro}\n\n{next_question}"
-                                else:
-                                    state["response"] = f"{ack}\n\n{next_question}"
-                            else:
-                                state["response"] = "Got it! Moving to the next stage."
-                        else:
-                            # Onboarding complete
-                            state["next_stage"] = "completed"
-                            state["response"] = "Got it!\n\n" + self._STAGE_INTRODUCTIONS.get("completed", "Congratulations! You've completed onboarding.")
+                        # Stage complete -> enter Q&A mode instead of auto-advancing.
+                        ack = f"Thanks, {known_name}!" if known_name and current_stage == "welcome" and current_field_key == "name" else "Got it!"
+                        qa_prompt = self._STAGE_QA_PROMPTS.get(
+                            current_stage,
+                            "Do you have any questions about this stage? I can look up answers from our company documents. When you're ready, say **'move on'** to continue."
+                        )
+                        state["response"] = f"{ack}\n\n{qa_prompt}"
+                        state["next_stage"] = None
+                        namespaced_extracted["qa.pending_stage"] = current_stage
+                        state["extracted_facts"] = namespaced_extracted
                     else:
                         state["next_stage"] = None
                         next_question = remaining[0][1]
@@ -1064,6 +1210,10 @@ Rules:
                     if fallback_value:
                         namespaced_extracted[key] = fallback_value
 
+            # Store the question text so the PDF summary can show it
+            if current_field_key and current_question and namespaced_extracted:
+                qlabel_key = f"{current_stage}._qlabel.{current_field_key}"
+                namespaced_extracted[qlabel_key] = current_question
             state["extracted_facts"] = namespaced_extracted
 
             known_name = None
@@ -1105,15 +1255,18 @@ Rules:
 
                     # Stage complete -> enter Q&A mode instead of auto-advancing.
                     state["next_stage"] = None
-                    qa_prompt = "Stage complete. Do you have any questions about this stage? I can answer using your uploaded docs. When you're ready, say 'move on' to continue."
+                    qa_prompt = self._STAGE_QA_PROMPTS.get(
+                        current_stage,
+                        "Do you have any questions about this stage? I can look up answers from our company documents. When you're ready, say **'move on'** to continue."
+                    )
                     state["response"] = f"{base}\n\n{qa_prompt}".strip() if base else qa_prompt
 
                     # Persist the Q&A pending stage so it survives reruns.
                     namespaced_extracted["qa.pending_stage"] = current_stage
                     state["extracted_facts"] = namespaced_extracted
                 else:
-                    # Stage was already complete. If the user is asking a question, allow the normal
-                    # RAG+LLM path (below) to answer it instead of returning a canned message.
+                    # Stage was already complete. If the user is asking a question, answer
+                    # it from RAG docs instead of returning a canned message.
                     _text = str(state.get("user_input") or "").strip().lower()
                     _is_question = (
                         "?" in _text
@@ -1125,8 +1278,24 @@ Rules:
                         or _text.startswith("who ")
                         or _text.startswith("can you ")
                         or _text.startswith("should i ")
+                        or _text.startswith("tell me ")
+                        or _text.startswith("explain ")
+                        or _text.startswith("describe ")
+                        or _text.startswith("do we ")
+                        or _text.startswith("do i ")
+                        or _text.startswith("is there ")
+                        or _text.startswith("are there ")
+                        or "policy" in _text
+                        or "procedure" in _text
+                        or "rule" in _text
+                        or "guideline" in _text
+                        or "about " in _text
+                        or "work from home" in _text
+                        or "remote work" in _text
                     )
-                    if not _is_question:
+                    if _is_question:
+                        return self._handle_qa_question(state, current_stage, onboarding_facts)
+                    else:
                         state["response"] = "This stage is already complete. You can ask me questions about TechVenture Solutions, or I can help you with the next stage."
                         state["next_stage"] = None
                         logger.info("Stage complete message returned (input did not look like a question)")

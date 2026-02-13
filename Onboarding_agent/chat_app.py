@@ -263,7 +263,15 @@ def _is_stage_complete(stage: str, facts: dict) -> bool:
     
     # For other stages, check if ANY facts exist for that stage
     # This works with both static and dynamic field keys (q1, q2, etc.)
-    stage_facts = [k for k in facts.keys() if k.startswith(f"{stage}.") and facts.get(k) not in (None, "")]
+    # Exclude internal metadata keys (_qlabel.*, qa.pending_stage)
+    stage_prefix = f"{stage}."
+    stage_facts = [
+        k for k in facts.keys()
+        if k.startswith(stage_prefix)
+        and facts.get(k) not in (None, "")
+        and not k[len(stage_prefix):].startswith("_qlabel.")
+        and k[len(stage_prefix):] != "qa.pending_stage"
+    ]
     return len(stage_facts) > 0
 
 
@@ -439,9 +447,21 @@ def _generate_comprehensive_onboarding_pdf(user_id: int, session_id: str, facts:
             fontName='Helvetica-Bold',
             alignment=TA_LEFT,
         )
+        # Build a lookup of question labels: field_key -> question text
+        qlabel_map = {}
+        for k, v in stage_facts.items():
+            parts = k.split(".", 1)
+            if len(parts) == 2 and parts[1].startswith("_qlabel."):
+                actual_field = parts[1].replace("_qlabel.", "", 1)
+                qlabel_map[actual_field] = str(v)
+
         for key, value in sorted(stage_facts.items()):
             field = key.split(".", 1)[1] if "." in key else key
-            label = field.replace("_", " ").title()
+            # Skip internal metadata keys
+            if field.startswith("_qlabel.") or field == "qa.pending_stage":
+                continue
+            # Use stored question text if available, otherwise humanise the key
+            label = qlabel_map.get(field, field.replace("_", " ").title())
             label_cell = Paragraph(label, label_style)
             # Wrap all text in Paragraph for proper text wrapping
             value_text = str(value)
@@ -946,14 +966,31 @@ for message in st.session_state.messages:
         if st.session_state.show_sources and "sources" in message and message["sources"]:
             with st.expander(f"📚 Sources ({len(message['sources'])})"):
                 for i, source in enumerate(message["sources"], 1):
+                    _src_file_name = source.get('file_name', '')
+                    _src_upload_id = source.get('upload_id', '')
+                    _src_display_name = _src_file_name or source.get('source', 'unknown')
+
                     st.markdown(f"""
                     <div class="source-card">
-                        <strong>Source {i}:</strong> {source.get('source', 'unknown')}<br>
+                        <strong>Source {i}:</strong> {_src_display_name}<br>
                         <strong>Category:</strong> {source.get('category', 'general')}<br>
                         <strong>Relevance:</strong> {source.get('score', 0):.2f}<br>
                         <em>{source.get('preview', '')}</em>
                     </div>
                     """, unsafe_allow_html=True)
+
+                    if _src_file_name and _src_upload_id:
+                        with st.expander(f"📄 View full document: {_src_file_name}"):
+                            _upload_root = Path(__file__).resolve().parent / "uploaded_docs"
+                            _found_files = list(_upload_root.glob(f"{_src_upload_id}_*")) if _upload_root.exists() else []
+                            if _found_files:
+                                try:
+                                    _doc_text = _found_files[0].read_text(encoding="utf-8", errors="replace")
+                                    st.markdown(_doc_text)
+                                except Exception as _read_err:
+                                    st.error(f"Could not read file: {_read_err}")
+                            else:
+                                st.warning(f"Raw file not found for upload ID: {_src_upload_id}")
 
 
 user_input = None
