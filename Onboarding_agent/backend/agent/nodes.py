@@ -43,7 +43,7 @@ class AgentNodes:
         ),
         "learning_preferences": (
             "📚 **Learning Preferences**\n\n"
-            "Let's understand how you work best! This stage helps us tailor TechVenture to your "
+            "Let's understand how you work best! This stage helps us tailor TechVenture Solutions to your "
             "workflow, recommend the right integrations, and set up notifications that work for you — "
             "not against you. The better we understand your needs, the more productive you'll be."
         ),
@@ -51,7 +51,7 @@ class AgentNodes:
             "🚀 **First Steps**\n\n"
             "Time to take action! In this stage, we'll make sure you have everything you need to hit "
             "the ground running — from account access to creating your first project. This is where "
-            "onboarding becomes real and you start seeing TechVenture in action."
+            "onboarding becomes real and you start seeing TechVenture Solutions in action."
         ),
         "completed": (
             "🎉 **Onboarding Complete!**\n\n"
@@ -898,7 +898,7 @@ Our mission is to eliminate busywork so teams can focus on what matters most.
 YOUR ROLE:
 You're here to welcome newcomers, help them feel at home, and learn about them so we can personalize their experience. Share relevant company info naturally as you chat — don't just ask questions, have a real conversation!
 
-When acknowledging their answers, share something relevant about TechVenture that connects to what they said.
+When acknowledging their answers, share something relevant about TechVenture Solutions that connects to what they said.
 """,
                 "profile_setup": """You are helping the user build their profile at TechVenture Solutions.
 
@@ -909,12 +909,12 @@ WHY PROFILES MATTER:
 - Your timezone helps schedule meetings and set working hours
 
 COMPANY CULTURE:
-At TechVenture, we believe in transparency and collaboration. Profiles are visible to teammates to foster connection. We support remote, hybrid, and office work arrangements across all timezones.
+At TechVenture Solutions, we believe in transparency and collaboration. Profiles are visible to teammates to foster connection. We support remote, hybrid, and office work arrangements across all timezones.
 
 YOUR ROLE:
 Guide them through profile setup while explaining how each piece of information helps them and their team. Make it feel valuable, not bureaucratic.
 """,
-                "learning_preferences": """You are learning how the user works best to customize their TechVenture experience.
+                "learning_preferences": """You are learning how the user works best to customize their TechVenture Solutions experience.
 
 WHAT WE CAN CUSTOMIZE:
 - **Dashboard layout**: Focus on what matters most to you
@@ -929,13 +929,13 @@ COMMON CHALLENGES WE SOLVE:
 - Difficulty tracking who's working on what
 
 YOUR ROLE:
-Understand their workflow, challenges, and preferences. Share how TechVenture features can address their specific pain points. Make recommendations based on what they tell you.
+Understand their workflow, challenges, and preferences. Share how TechVenture Solutions features can address their specific pain points. Make recommendations based on what they tell you.
 """,
-                "first_steps": """You are helping the user take their first real actions in TechVenture.
+                "first_steps": """You are helping the user take their first real actions in TechVenture Solutions.
 
 GETTING STARTED OPTIONS:
 - **Create a project**: Set up your first project with tasks and milestones
-- **Invite teammates**: Bring your team into TechVenture
+- **Invite teammates**: Bring your team into TechVenture Solutions
 - **Explore templates**: Use pre-built templates for common workflows
 - **Set up integrations**: Connect Slack, calendar, or other tools
 - **Take a quick tour**: 5-minute interactive walkthrough
@@ -953,7 +953,7 @@ Help them take meaningful first steps. Offer guidance based on their role and go
 
 WHAT'S NEXT:
 - Explore advanced features like automation and custom workflows
-- Join the TechVenture community for tips and networking
+- Join the TechVenture Solutions community for tips and networking
 - Check out the weekly webinars on productivity and collaboration
 - Reach out anytime — I'm here to help with questions big or small
 
@@ -964,7 +964,7 @@ ADVANCED FEATURES TO EXPLORE:
 - API access for custom integrations
 
 YOUR ROLE:
-Congratulate them warmly! Offer ongoing support and suggest next steps based on their role and interests. Make them feel like part of the TechVenture community.
+Congratulate them warmly! Offer ongoing support and suggest next steps based on their role and interests. Make them feel like part of the TechVenture Solutions community.
 """
             }
             

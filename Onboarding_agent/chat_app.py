@@ -11,6 +11,7 @@ from backend.config import settings
 from backend.memory.long_term import LongTermMemory
 from backend.agent.nodes import AgentNodes
 import logging
+from sqlalchemy.orm.attributes import flag_modified
 from io import BytesIO
 from pathlib import Path
 from reportlab.lib.pagesizes import letter
@@ -224,26 +225,46 @@ def _required_fields_for_stage(stage: str, facts: dict) -> list[str]:
 
 
 def _get_onboarding_facts(user_id: int) -> dict:
-    from backend.memory.long_term import LongTermMemory
     db = next(get_db())
+    profile = db.query(OnboardingProfileDB).filter(OnboardingProfileDB.user_id == user_id).first()
+    profile_facts = {}
+    if profile and profile.progress:
+        profile_facts = profile.progress.get("facts", {})
+
+    # Fallback: also read from LongTermMemoryDB (the agent always saves there)
     ltm = LongTermMemory(db)
-    memories = ltm.get_memories_by_type(user_id, "onboarding")
-    facts = {}
-    for mem in memories:
-        if mem.get("key"):
-            facts[mem["key"]] = mem["value"]
-    return facts
+    ltm_memories = ltm.get_memories_by_type(user_id, "onboarding")
+    ltm_facts = {}
+    for m in ltm_memories or []:
+        k = m.get("key")
+        if k:
+            ltm_facts[str(k)] = m.get("value")
+
+    # Merge: LTM facts as base, profile facts override
+    merged = {**ltm_facts, **profile_facts}
+
+    # Backfill to profile if there are LTM facts missing from profile
+    if merged and merged != profile_facts and profile:
+        if profile.progress is None:
+            profile.progress = {}
+        profile.progress["facts"] = merged
+        flag_modified(profile, "progress")
+        db.commit()
+
+    return merged
 
 
 def _is_stage_complete(stage: str, facts: dict) -> bool:
-    required = _required_fields_for_stage(stage, facts)
-    if not required:
-        return stage == "completed"
-    for f in required:
-        key = f"{stage}.{f}"
-        if key not in facts or facts.get(key) in (None, ""):
-            return False
-    return True
+    if stage == "welcome":
+        # Welcome stage requires name and role
+        return bool(facts.get("welcome.name") and facts.get("welcome.role"))
+    if stage == "completed":
+        return False
+    
+    # For other stages, check if ANY facts exist for that stage
+    # This works with both static and dynamic field keys (q1, q2, etc.)
+    stage_facts = [k for k in facts.keys() if k.startswith(f"{stage}.") and facts.get(k) not in (None, "")]
+    return len(stage_facts) > 0
 
 
 def _generate_stage_summary_pdf(user_id: int, session_id: str, stage: str, answers: list[str]) -> bytes:
@@ -398,13 +419,10 @@ def _generate_comprehensive_onboarding_pdf(user_id: int, session_id: str, facts:
     
     # Process each stage
     for stage_id, stage_title, stage_desc in stage_info:
-        required_fields = _required_fields_for_stage(stage_id, facts)
-        if not required_fields:
-            continue
-            
-        # Check if stage has any data
-        has_data = any(facts.get(f"{stage_id}.{field}") for field in required_fields)
-        if not has_data:
+        # Find all facts for this stage (works with both static and dynamic field keys)
+        stage_facts = {k: v for k, v in facts.items() if k.startswith(f"{stage_id}.") and v not in (None, "")}
+        
+        if not stage_facts:
             continue
         
         # Stage header
@@ -413,19 +431,37 @@ def _generate_comprehensive_onboarding_pdf(user_id: int, session_id: str, facts:
         
         # Stage data
         stage_data = []
-        for field in required_fields:
-            key = f"{stage_id}.{field}"
-            value = facts.get(key, "Not provided")
+        label_style = ParagraphStyle(
+            'LabelStyle',
+            parent=styles['Normal'],
+            fontSize=11,
+            spaceAfter=4,
+            fontName='Helvetica-Bold',
+            alignment=TA_LEFT,
+        )
+        for key, value in sorted(stage_facts.items()):
+            field = key.split(".", 1)[1] if "." in key else key
             label = field.replace("_", " ").title()
-            stage_data.append([label, str(value)])
+            label_cell = Paragraph(label, label_style)
+            # Wrap all text in Paragraph for proper text wrapping
+            value_text = str(value)
+            
+            # Check if value is a file path (uploaded photo)
+            if value_text.startswith("/") or value_text.startswith("C:") or "uploaded_profile_pics" in value_text:
+                # Make it a clickable link
+                value_cell = Paragraph(f'<link href="file://{value_text}" color="blue"><u>{value_text}</u></link>', field_style)
+            else:
+                value_cell = Paragraph(value_text, field_style)
+            stage_data.append([label_cell, value_cell])
         
         if stage_data:
             stage_table = Table(stage_data, colWidths=[2*inch, 4*inch])
             stage_table.setStyle(TableStyle([
                 ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#e0e7ff')),
                 ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
-                ('ALIGN', (0, 0), (0, -1), 'RIGHT'),
+                ('ALIGN', (0, 0), (0, -1), 'LEFT'),
                 ('ALIGN', (1, 0), (1, -1), 'LEFT'),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
                 ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
                 ('FONTSIZE', (0, 0), (-1, -1), 11),
                 ('BOTTOMPADDING', (0, 0), (-1, -1), 10),
@@ -459,6 +495,7 @@ def _save_stage_answers_to_profile(user_id: int, stage: str, answers: list[str])
         "answers": answers,
         "updated_at": datetime.now().isoformat()
     }
+    flag_modified(profile, "progress")
     db.commit()
 
 
@@ -474,6 +511,7 @@ def _save_facts_to_profile(user_id: int, new_facts: dict) -> None:
     if not isinstance(profile.progress.get("facts"), dict):
         profile.progress["facts"] = {}
     profile.progress["facts"].update(new_facts)
+    flag_modified(profile, "progress")
     db.commit()
 
 rag = initialize_system()
@@ -921,12 +959,28 @@ for message in st.session_state.messages:
 user_input = None
 if has_existing_progress or st.session_state.onboarding_started:
     _last_msg = st.session_state.messages[-1] if st.session_state.messages else None
+    _last_content = (
+        str(_last_msg.get("content") or "").lower()
+        if isinstance(_last_msg, dict)
+        else ""
+    )
     _expecting_profile_pic = bool(
         isinstance(_last_msg, dict)
         and _last_msg.get("role") == "assistant"
         and isinstance(_last_msg.get("content"), str)
-        and "profile picture" in _last_msg.get("content", "").lower()
         and _last_msg.get("stage") == st.session_state.current_stage
+        and any(
+            k in _last_content
+            for k in [
+                "profile picture",
+                "profile photo",
+                "headshot",
+                "upload a photo",
+                "upload your photo",
+                "upload a headshot",
+                "upload your headshot",
+            ]
+        )
     )
 
     if _expecting_profile_pic:
