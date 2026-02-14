@@ -221,7 +221,7 @@ def _role_category(role_value: str | None) -> str:
 
 def _required_fields_for_stage(stage: str, facts: dict) -> list[str]:
     if stage == "welcome":
-        return ["name", "role", "email", "pronouns", "emergency_contact", "accessibility_needs"]
+        return ["name", "name_alias", "role", "department", "email_preference", "phone_number", "emergency_contact", "pronouns", "accessibility_needs"]
     if stage == "completed":
         return []
     role_cat = _role_category(facts.get("welcome.role"))
@@ -423,7 +423,7 @@ def _generate_comprehensive_onboarding_pdf(user_id: int, session_id: str, facts:
     
     # Stage definitions
     stage_info = [
-        ("welcome", "👋 Welcome & Profile Setup", "Personal details, contact info, and account setup"),
+        ("welcome", "👋 Welcome & Profile Setup", "Name, nickname, role, department, email preference, phone, emergency contact, pronouns, accessibility"),
         ("department_info", "🏢 Department Information", "Org structure, team directory, and key stakeholders"),
         ("key_responsibilities", "🎯 Key Responsibilities", "Role duties, KPIs, goals, and initial tasks"),
         ("tools_systems", "�️ Tools & Systems", "IT setup, software, hardware, and access credentials"),
