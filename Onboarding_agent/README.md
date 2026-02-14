@@ -552,7 +552,7 @@ Response:
   "sources": [
     {
       "content": "Project creation guide...",
-      "metadata": {"source": "projects_guide.md", "stage": "first_steps"}
+      "metadata": {"source": "projects_guide.md", "stage": "key_responsibilities"}
     }
   ],
   "current_stage": "welcome"

@@ -6,9 +6,10 @@ from enum import Enum
 
 class OnboardingStage(str, Enum):
     WELCOME = "welcome"
-    PROFILE_SETUP = "profile_setup"
-    LEARNING_PREFERENCES = "learning_preferences"
-    FIRST_STEPS = "first_steps"
+    DEPARTMENT_INFO = "department_info"
+    KEY_RESPONSIBILITIES = "key_responsibilities"
+    TOOLS_SYSTEMS = "tools_systems"
+    TRAINING_NEEDS = "training_needs"
     COMPLETED = "completed"
 
 

@@ -87,10 +87,11 @@ llm = get_llm()
 st.sidebar.title("🎯 Onboarding Progress")
 
 stages = [
-    ("welcome", "Welcome", "🎉"),
-    ("profile_setup", "Profile Setup", "👤"),
-    ("learning_preferences", "Learning Preferences", "📚"),
-    ("first_steps", "First Steps", "🚀"),
+    ("welcome", "Welcome & Profile Setup", "🎉"),
+    ("department_info", "Department Information", "🏢"),
+    ("key_responsibilities", "Key Responsibilities", "🎯"),
+    ("tools_systems", "Tools & Systems", "🛠️"),
+    ("training_needs", "Training Needs", "�"),
     ("completed", "Completed", "✅")
 ]
 
@@ -152,10 +153,11 @@ if user_input:
     with st.spinner("🤔 Thinking..."):
         try:
             stage_prompts = {
-                "welcome": "You are greeting a new user. Be warm and welcoming.",
-                "profile_setup": "You are helping the user set up their profile.",
-                "learning_preferences": "You are learning about the user's preferences.",
-                "first_steps": "You are guiding the user through their first steps.",
+                "welcome": "You are greeting a new user and collecting their personal details. Be warm and welcoming.",
+                "department_info": "You are introducing the user to their department, team, and key stakeholders.",
+                "key_responsibilities": "You are outlining the user's role duties, KPIs, goals, and initial tasks.",
+                "tools_systems": "You are guiding the user through IT setup, software, and access credentials.",
+                "training_needs": "You are building a personalized training plan with compliance and skill development.",
                 "completed": "The user has completed onboarding. Offer ongoing support."
             }
             

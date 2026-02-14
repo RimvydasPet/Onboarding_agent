@@ -182,24 +182,28 @@ if "resume_kickoff_done" not in st.session_state:
 
 ROLE_STAGE_FIELDS = {
     "developer": {
-        "profile_setup": ["dev_stack", "dev_repo_access", "dev_env"],
-        "learning_preferences": ["dev_workflow", "dev_quality", "dev_integrations"],
-        "first_steps": ["dev_first_task", "dev_access_blockers", "dev_help_area"],
+        "department_info": ["dev_team_structure", "dev_key_repos", "dev_stakeholders"],
+        "key_responsibilities": ["dev_duties", "dev_kpis", "dev_first_tasks"],
+        "tools_systems": ["dev_ide", "dev_ci_cd", "dev_access"],
+        "training_needs": ["dev_onboarding_modules", "dev_skill_gaps", "dev_certifications"],
     },
     "pm": {
-        "profile_setup": ["pm_area", "pm_reporting", "pm_stakeholders"],
-        "learning_preferences": ["pm_planning_style", "pm_pain", "pm_integrations"],
-        "first_steps": ["pm_first_project", "pm_team_invite", "pm_help_area"],
+        "department_info": ["pm_team_structure", "pm_cross_functional", "pm_stakeholders"],
+        "key_responsibilities": ["pm_duties", "pm_kpis", "pm_first_tasks"],
+        "tools_systems": ["pm_project_tools", "pm_reporting_tools", "pm_access"],
+        "training_needs": ["pm_onboarding_modules", "pm_skill_gaps", "pm_certifications"],
     },
     "it_admin": {
-        "profile_setup": ["it_scope", "it_sso", "it_compliance"],
-        "learning_preferences": ["it_integrations", "it_permissions", "it_notifications"],
-        "first_steps": ["it_first_action", "it_users", "it_help_area"],
+        "department_info": ["it_team_structure", "it_infrastructure", "it_stakeholders"],
+        "key_responsibilities": ["it_duties", "it_kpis", "it_first_tasks"],
+        "tools_systems": ["it_admin_tools", "it_monitoring", "it_access"],
+        "training_needs": ["it_onboarding_modules", "it_skill_gaps", "it_certifications"],
     },
     "general": {
-        "profile_setup": ["focus_area"],
-        "learning_preferences": ["preferred_learning"],
-        "first_steps": ["first_setup"],
+        "department_info": ["team_overview"],
+        "key_responsibilities": ["role_duties"],
+        "tools_systems": ["core_tools"],
+        "training_needs": ["learning_path"],
     },
 }
 
@@ -217,7 +221,7 @@ def _role_category(role_value: str | None) -> str:
 
 def _required_fields_for_stage(stage: str, facts: dict) -> list[str]:
     if stage == "welcome":
-        return ["name", "role"]
+        return ["name", "role", "email", "pronouns", "emergency_contact", "accessibility_needs"]
     if stage == "completed":
         return []
     role_cat = _role_category(facts.get("welcome.role"))
@@ -419,10 +423,11 @@ def _generate_comprehensive_onboarding_pdf(user_id: int, session_id: str, facts:
     
     # Stage definitions
     stage_info = [
-        ("welcome", "👋 Welcome", "Basic information and introduction"),
-        ("profile_setup", "👤 Profile Setup", "Personal profile and preferences"),
-        ("learning_preferences", "📚 Learning Preferences", "Work style and learning approach"),
-        ("first_steps", "🚀 First Steps", "Initial actions and setup")
+        ("welcome", "👋 Welcome & Profile Setup", "Personal details, contact info, and account setup"),
+        ("department_info", "🏢 Department Information", "Org structure, team directory, and key stakeholders"),
+        ("key_responsibilities", "🎯 Key Responsibilities", "Role duties, KPIs, goals, and initial tasks"),
+        ("tools_systems", "�️ Tools & Systems", "IT setup, software, hardware, and access credentials"),
+        ("training_needs", "📚 Training Needs", "Compliance training, skill gaps, and learning paths")
     ]
     
     # Process each stage
@@ -539,10 +544,11 @@ rag = initialize_system()
 st.sidebar.title("🎯 Onboarding Progress")
 
 stages = [
-    ("welcome", "Welcome", "🎉"),
-    ("profile_setup", "Profile Setup", "👤"),
-    ("learning_preferences", "Learning Preferences", "📚"),
-    ("first_steps", "First Steps", "🚀"),
+    ("welcome", "Welcome & Profile Setup", "🎉"),
+    ("department_info", "Department Information", "🏢"),
+    ("key_responsibilities", "Key Responsibilities", "🎯"),
+    ("tools_systems", "Tools & Systems", "🛠️"),
+    ("training_needs", "Training Needs", "�"),
     ("completed", "Completed", "✅")
 ]
 
@@ -625,7 +631,7 @@ with st.sidebar.expander("Developers info", expanded=False):
         ltm = LongTermMemory(db)
 
         stage_rows = []
-        for _stage_key in ["profile_setup", "learning_preferences", "first_steps"]:
+        for _stage_key in ["department_info", "key_responsibilities", "tools_systems", "training_needs"]:
             bank_key = AgentNodes._generated_bank_cache_key(_role, _stage_key)
             research_key = AgentNodes._role_research_cache_key(_role, _stage_key)
             cached_bank = ltm.get_memory(st.session_state.user_id, "onboarding_generated", bank_key)
@@ -653,7 +659,7 @@ with st.sidebar.expander("Developers info", expanded=False):
     )
     _upload_stage = st.selectbox(
         "Upload stage (optional)",
-        options=["", "welcome", "profile_setup", "learning_preferences", "first_steps"],
+        options=["", "welcome", "department_info", "key_responsibilities", "tools_systems", "training_needs"],
         key="dev_upload_stage",
     )
     _uploaded_files = st.file_uploader(
@@ -938,11 +944,12 @@ if (
     stage_title = stage_titles.get(st.session_state.current_stage, st.session_state.current_stage)
 
     intro_body = {
-        "welcome": "At TechVenture Solutions, we're committed to making your onboarding experience smooth and engaging.",
-        "profile_setup": "Now let's set up your profile. This is important because it helps personalize your experience, improves collaboration, and ensures approvals/support requests reach the right people.",
-        "learning_preferences": "Next we'll learn your working style and preferences. This matters because we can tailor dashboards, integrations, and notifications so TechVenture supports your workflow — not distracts from it.",
-        "first_steps": "Now we'll take your first real actions. This stage is important because it gets you productive quickly: access, integrations, and setting up your first project so you can start delivering results.",
-        "completed": "You're all set. This stage is important because it confirms you're ready to work independently, and it gives you clear next steps to explore advanced features and get ongoing support."
+        "welcome": "At TechVenture Solutions, we're committed to making your onboarding experience smooth and engaging. Let's start by getting to know you!",
+        "department_info": "Let's get you familiar with your team and department! We'll cover the org structure, introduce key stakeholders, and schedule some intro meetings.",
+        "key_responsibilities": "Now let's outline your role in detail — duties, KPIs, goals, and initial tasks to get you started.",
+        "tools_systems": "Time to get your tech stack set up! We'll walk through IT access, software installs, and make sure everything works.",
+        "training_needs": "Let's build your personalized learning path — compliance training, role-specific modules, and skill development.",
+        "completed": "You're all set! You're ready to work independently with clear next steps to explore advanced features and get ongoing support."
     }.get(st.session_state.current_stage, "Let's continue your onboarding journey.")
 
     st.markdown(f"""
@@ -1172,11 +1179,12 @@ if len(st.session_state.messages) == 0:
         _next_stage_title = _stage_titles.get(_resume_next_stage_id, _resume_next_stage_id)
 
         _next_intro_body = {
-            "welcome": "At TechVenture Solutions, we're committed to making your onboarding experience smooth and engaging.",
-            "profile_setup": "Now let's set up your profile. This is important because it helps personalize your experience, improves collaboration, and ensures approvals/support requests reach the right people.",
-            "learning_preferences": "Next we'll learn your working style and preferences. This matters because we can tailor dashboards, integrations, and notifications so TechVenture supports your workflow — not distracts from it.",
-            "first_steps": "Now we'll take your first real actions. This stage is important because it gets you productive quickly: access, integrations, and setting up your first project so you can start delivering results.",
-            "completed": "You're all set. This stage is important because it confirms you're ready to work independently, and it gives you clear next steps to explore advanced features and get ongoing support."
+            "welcome": "At TechVenture Solutions, we're committed to making your onboarding experience smooth and engaging. Let's start by getting to know you!",
+            "department_info": "Let's get you familiar with your team and department! We'll cover the org structure, introduce key stakeholders, and schedule some intro meetings.",
+            "key_responsibilities": "Now let's outline your role in detail — duties, KPIs, goals, and initial tasks to get you started.",
+            "tools_systems": "Time to get your tech stack set up! We'll walk through IT access, software installs, and make sure everything works.",
+            "training_needs": "Let's build your personalized learning path — compliance training, role-specific modules, and skill development.",
+            "completed": "You're all set! You're ready to work independently with clear next steps to explore advanced features and get ongoing support."
         }.get(_resume_next_stage_id, "Let's continue your onboarding journey.")
 
         st.markdown(f"""

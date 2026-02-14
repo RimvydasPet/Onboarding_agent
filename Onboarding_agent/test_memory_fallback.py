@@ -55,7 +55,7 @@ def test_fallback_mechanism():
     # Test 3: Update context
     print("Test 3: Update Context")
     print("-" * 40)
-    memory.update_context(session_id, {"stage": "profile_setup", "progress": 25})
+    memory.update_context(session_id, {"stage": "department_info", "progress": 25})
     updated_context = memory.get_context(session_id)
     print(f"Updated context: {updated_context}")
     print()
