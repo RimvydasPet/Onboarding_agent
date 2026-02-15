@@ -22,36 +22,48 @@ class AgentNodes:
 
     _STAGE_FIELDS: Dict[str, list[tuple[str, str]]] = {
         "welcome": [
-            ("name", "Before we begin, what's your name?"),
-            ("role", "Great—what's your role or position? (e.g., IT Admin, Developer, Project Manager)"),
-            # Everything after role is role-based (see _ROLE_STAGE_FIELDS)
+            ("name", "Welcome to your first day! What's your full name?"),
+            ("name_alias", "Do you go by a nickname or preferred name? (Type 'no' if your full name is fine)"),
+            ("role", "What role or position are you onboarding for? (e.g., IT Admin, Developer, Project Manager)"),
+            ("department", "Which department are you joining?"),
+            ("email_preference", "We'll set up your work email — what format would you prefer? (e.g., john.doe, jdoe, john.d)"),
+            ("phone_number", "What's your phone number so we can reach you if needed?"),
+            ("emergency_contact", "For safety purposes, could you share an emergency contact name and phone number?"),
+            ("pronouns", "What are your preferred pronouns? (e.g., he/him, she/her, they/them)"),
+            ("accessibility_needs", "Do you have any accessibility needs or accommodations we should know about? (Type 'none' if not applicable)"),
         ],
-        "profile_setup": [],
-        "learning_preferences": [],
-        "first_steps": [],
+        "department_info": [],
+        "key_responsibilities": [],
+        "tools_systems": [],
+        "training_needs": [],
         "completed": []
     }
 
-    _STAGE_ORDER = ["welcome", "profile_setup", "learning_preferences", "first_steps", "completed"]
+    _STAGE_ORDER = ["welcome", "department_info", "key_responsibilities", "tools_systems", "training_needs", "completed"]
 
     _STAGE_QA_PROMPTS: Dict[str, str] = {
         "welcome": (
             "Before we move on — do you have any questions about TechVenture Solutions or the onboarding process? "
             "I can look up answers from our company documents. If you're all set, just say **'move on'** and we'll continue!"
         ),
-        "profile_setup": (
-            "That wraps up your profile setup! Do you have any questions about your profile, team visibility, "
-            "or how your information is used at TechVenture Solutions? I'll check our company docs for you. "
+        "department_info": (
+            "That covers your department overview! Do you have any questions about the org structure, "
+            "your team, or key stakeholders? I can search our company docs for you. "
             "Otherwise, say **'move on'** to proceed."
         ),
-        "learning_preferences": (
-            "Great, your learning preferences are all set! Any questions about integrations, notifications, "
-            "or how we'll customize your experience? I can search our knowledge base for answers. "
+        "key_responsibilities": (
+            "Great, your responsibilities and goals are mapped out! Any questions about your KPIs, "
+            "decision-making scope, or initial tasks? I can look up answers from our knowledge base. "
             "When you're ready, say **'move on'** to continue."
         ),
-        "first_steps": (
-            "Awesome — your first steps are mapped out! Do you have any questions about getting started, "
-            "access, or anything else? I'll look through our company documents to help. "
+        "tools_systems": (
+            "Your tools and systems setup is covered! Do you have any questions about access credentials, "
+            "software, hardware, or IT support? I'll check our company documents for you. "
+            "Say **'move on'** when you're ready to continue."
+        ),
+        "training_needs": (
+            "Awesome — your training plan is set! Do you have any questions about compliance modules, "
+            "learning resources, or skill development? I can search our knowledge base for answers. "
             "Say **'move on'** when you're ready to wrap up."
         ),
     }
@@ -88,23 +100,29 @@ class AgentNodes:
     _QA_DEFAULT_CONTACT = "your **direct manager** or the **HR Department** (hr@techventure.com)"
 
     _STAGE_INTRODUCTIONS: Dict[str, str] = {
-        "profile_setup": (
-            "🎯 **Profile Setup**\n\n"
-            "Now let's set up your profile! This helps us personalize your experience and ensures "
-            "your teammates can easily find and collaborate with you. A complete profile also helps "
-            "route approvals and support requests to the right people."
+        "department_info": (
+            "🏢 **Department Information**\n\n"
+            "Let's get you familiar with your team and department! I'll share the org structure, "
+            "introduce key stakeholders, and help you understand how your department fits into "
+            "TechVenture Solutions. We'll also schedule some intro meetings for you."
         ),
-        "learning_preferences": (
-            "📚 **Learning Preferences**\n\n"
-            "Let's understand how you work best! This stage helps us tailor TechVenture Solutions to your "
-            "workflow, recommend the right integrations, and set up notifications that work for you — "
-            "not against you. The better we understand your needs, the more productive you'll be."
+        "key_responsibilities": (
+            "🎯 **Key Responsibilities**\n\n"
+            "Now let's outline your role in detail! We'll cover your specific duties, KPIs, "
+            "first-week and first-month goals, decision-making scope, and success metrics. "
+            "I'll also assign some initial tasks to get you started."
         ),
-        "first_steps": (
-            "🚀 **First Steps**\n\n"
-            "Time to take action! In this stage, we'll make sure you have everything you need to hit "
-            "the ground running — from account access to creating your first project. This is where "
-            "onboarding becomes real and you start seeing TechVenture Solutions in action."
+        "tools_systems": (
+            "🛠️ **Tools & Systems**\n\n"
+            "Time to get your tech stack set up! We'll walk through IT access, software installs, "
+            "hardware checklist, and make sure you can log into everything you need. "
+            "I'll guide you through tutorials and troubleshoot any issues."
+        ),
+        "training_needs": (
+            "📚 **Training Needs**\n\n"
+            "Let's build your personalized learning path! We'll cover mandatory compliance training, "
+            "role-specific modules, and identify any skill gaps. I'll set up reminders and "
+            "schedule a 30-day check-in to make sure everything is on track."
         ),
         "completed": (
             "🎉 **Onboarding Complete!**\n\n"
@@ -290,10 +308,44 @@ class AgentNodes:
 
         stage = self._normalize_stage_key(stage)
 
-        prompt = f"""You are creating a role-specific onboarding plan for a new hire.
+        stage_guidance = {
+            "department_info": (
+                "This stage is about TELLING the newcomer about their department. "
+                "Generate questions that CHECK UNDERSTANDING or ask about PREFERENCES — "
+                "e.g., 'Does that make sense?', 'Would you like me to schedule a 1:1 with your manager?', "
+                "'Is there anyone specific you'd like to meet first?'"
+            ),
+            "key_responsibilities": (
+                "This stage is about EXPLAINING the newcomer's responsibilities. "
+                "Generate questions that CONFIRM ALIGNMENT or ask about INTEREST — "
+                "e.g., 'Does this align with what you expected?', 'Which area are you most excited about?', "
+                "'Would you like more detail on any of these responsibilities?'"
+            ),
+            "tools_systems": (
+                "This stage is about WALKING the newcomer through IT setup. "
+                "Generate questions that CHECK PROGRESS or ask about ISSUES — "
+                "e.g., 'Were you able to log in?', 'Is everything working?', "
+                "'Do you need help with any setup steps?'"
+            ),
+            "training_needs": (
+                "This stage is about PRESENTING the training plan. "
+                "Generate questions that ask about LEARNING PREFERENCES — "
+                "e.g., 'Do you prefer videos or documentation?', 'Any specific skills you want to develop?', "
+                "'Would you like reminders for training deadlines?'"
+            ),
+        }
+
+        stage_hint = stage_guidance.get(stage, "Generate preference or confirmation questions.")
+
+        prompt = f"""You are creating a role-specific onboarding guide for a new hire's FIRST DAY.
 
 ROLE: {role}
 STAGE: {stage}
+
+IMPORTANT CONTEXT: The newcomer is brand new — they don't know anything about the company yet.
+Your job is to generate content that GUIDES and INFORMS them, NOT quiz them on things they can't know.
+
+{stage_hint}
 
 Use the following web research snippets as background:
 {research_block}
@@ -305,9 +357,12 @@ Return ONLY valid JSON with this schema:
 }}
 
 Rules:
-- Provide 5-10 checklist items relevant to the role (can be general, not stage-specific).
+- Provide 5-10 checklist items relevant to the role and stage.
 - Provide 3-5 questions ONLY for the given STAGE.
-- Questions must be specific to the role and phrased conversationally.
+- Questions must be PREFERENCE, CONFIRMATION, or FEEDBACK questions — things the newcomer CAN answer.
+- NEVER ask the newcomer to explain company structure, processes, or tools they haven't learned yet.
+- Good: "Does that make sense?", "Would you like to know more about X?", "Any questions so far?"
+- Bad: "Can you describe the department structure?", "What tools does your team use?"
 - Do NOT generate questions for the welcome stage (name/role are handled separately).
 """
 
@@ -402,7 +457,14 @@ Rules:
         search_error = None
         if provider == "tavily":
             try:
-                research_results = self._tavily_search(f"{role} onboarding questions {stage}", max_results=6)
+                stage_search_focus = {
+                    "department_info": f"{role} onboarding department structure team introduction first day",
+                    "key_responsibilities": f"{role} job responsibilities KPIs first week goals onboarding",
+                    "tools_systems": f"{role} IT setup tools software access onboarding first day",
+                    "training_needs": f"{role} onboarding training plan compliance learning path",
+                }
+                search_query = stage_search_focus.get(stage, f"{role} onboarding {stage}")
+                research_results = self._tavily_search(search_query, max_results=6)
             except Exception as e:
                 search_error = str(e)
                 logger.warning(f"Web search failed: {e}")
@@ -468,38 +530,38 @@ Rules:
 
         if stage == "welcome" and field_key == "role":
             if any(k in low for k in ["dev", "engineer", "developer", "software"]):
-                return "Nice — I’ll tailor examples toward developer workflows (projects, tasks, integrations, and permissions)."
+                return "Nice — I'll tailor the onboarding toward developer workflows, tools, and technical setup."
             if any(k in low for k in ["pm", "project manager", "product", "scrum"]):
-                return "Great — I’ll focus on planning, milestones, reporting, and stakeholder collaboration."
+                return "Great — I'll focus on planning tools, stakeholder introductions, and reporting workflows."
             if any(k in low for k in ["it", "admin", "administrator"]):
-                return "Perfect — I’ll emphasize workspace setup, access, permissions, and integrations." 
+                return "Perfect — I'll emphasize infrastructure access, admin tools, and security policies."
 
-        if stage == "welcome" and field_key == "location":
-            if "remote" in low:
-                return "Noted — I’ll include remote-friendly tips (async updates, notification setup, and collaboration routines)."
+        if stage == "welcome" and field_key == "department":
+            return f"Got it — {text}! I'll make sure the department-specific info is ready for you in the next stage."
 
-        if stage == "profile_setup" and field_key == "timezone":
-            return "Got it — I’ll align reminders and suggested working hours to your timezone."
+        if stage == "welcome" and field_key == "accessibility_needs":
+            if low not in ("none", "no", "n/a", "na", "nothing"):
+                return "Thank you for sharing — we'll make sure your accommodations are in place before your first day."
 
-        if stage == "learning_preferences" and field_key == "learning_style":
+        if stage == "department_info" and field_key == "team_familiarity":
+            if any(k in low for k in ["no", "not", "don't", "dont", "new"]):
+                return "No worries — we'll make sure you get properly introduced to everyone on your team."
+
+        if stage == "key_responsibilities" and field_key == "alignment":
+            if any(k in low for k in ["no", "not", "different", "unclear"]):
+                return "Thanks for flagging that — I'd recommend discussing this with your manager to clarify expectations."
+
+        if stage == "tools_systems" and field_key == "access_issues":
+            if any(k in low for k in ["missing", "no", "not", "can't", "cant", "don\u2019t", "dont", "blocked"]):
+                return "Thanks — we should unblock access first. I can help you list exactly what to request and escalate to IT if needed."
+
+        if stage == "training_needs" and field_key == "learning_style":
             if "hands" in low or "walk" in low:
-                return "Great — I’ll give you short step-by-step walkthroughs you can follow immediately."
+                return "Great — I'll give you short step-by-step walkthroughs you can follow immediately."
             if "video" in low:
-                return "Great — I’ll keep guidance in short, digestible chunks and point you to relevant materials."
+                return "Great — I'll keep guidance in short, digestible chunks and point you to relevant video materials."
             if "doc" in low:
-                return "Great — I’ll keep answers structured and reference documentation sections when possible."
-
-        if stage == "learning_preferences" and field_key == "integrations":
-            if "slack" in low:
-                return "If Slack is important, we’ll prioritize notifications + project updates routing there."
-            if "jira" in low:
-                return "If Jira is in your workflow, we’ll map projects/tasks so updates stay consistent across tools."
-            if any(k in low for k in ["google", "workspace", "gmail", "calendar"]):
-                return "If Google Workspace is key, we’ll focus on calendar alignment and sharing/access patterns."
-
-        if stage == "first_steps" and field_key == "accounts_access":
-            if any(k in low for k in ["missing", "no", "not", "don\u2019t", "dont"]):
-                return "Thanks — we should unblock access first. I can help you list exactly what to request (accounts, permissions, and who typically approves)."
+                return "Great — I'll keep answers structured and reference documentation sections when possible."
 
         return ""
     
@@ -606,7 +668,7 @@ Rules:
                 # Per-stage caches: attempt to load any stage question lists already generated.
                 stage_banks: Dict[str, Any] = {}
                 stage_research: Dict[str, Any] = {}
-                for stage_key in ["profile_setup", "learning_preferences", "first_steps"]:
+                for stage_key in ["department_info", "key_responsibilities", "tools_systems", "training_needs"]:
                     bank_key = self._generated_bank_cache_key(role_value, stage_key)
                     research_key = self._role_research_cache_key(role_value, stage_key)
                     cached_bank = ltm.get_memory(state["user_id"], "onboarding_generated", bank_key)
@@ -798,6 +860,10 @@ Rules:
             current_stage = self._normalize_stage_key(state.get("current_stage"))
             onboarding_facts = dict(state.get("onboarding_facts") or {})
 
+            # --- Post-onboarding document search mode ---
+            if current_stage == "completed":
+                return self._handle_document_search(state, onboarding_facts)
+
             qa_pending_stage = str(onboarding_facts.get("qa.pending_stage") or "").strip()
             user_text = str(state.get("user_input") or "").strip()
             user_low = user_text.lower()
@@ -903,10 +969,11 @@ Rules:
 
             if kickoff:
                 stage_names = {
-                    "welcome": "Welcome",
-                    "profile_setup": "Profile Setup", 
-                    "learning_preferences": "Learning Preferences",
-                    "first_steps": "First Steps"
+                    "welcome": "Welcome & Profile Setup",
+                    "department_info": "Department Information", 
+                    "key_responsibilities": "Key Responsibilities",
+                    "tools_systems": "Tools & Systems",
+                    "training_needs": "Training Needs"
                 }
                 
                 completed_stages = []
@@ -922,7 +989,7 @@ Rules:
                     first_missing = ("welcome", welcome_missing[0][0], welcome_missing[0][1])
                 else:
                 
-                    for check_stage in ["welcome", "profile_setup", "learning_preferences", "first_steps"]:
+                    for check_stage in ["welcome", "department_info", "key_responsibilities", "tools_systems", "training_needs"]:
                         if check_stage != "welcome":
                             try:
                                 self._ensure_generated_question_bank(state, check_stage)
@@ -1042,58 +1109,87 @@ TechVenture Solutions is a modern project management and team collaboration plat
 Our mission is to eliminate busywork so teams can focus on what matters most.
 
 YOUR ROLE:
-You're here to welcome newcomers, help them feel at home, and learn about them so we can personalize their experience. Share relevant company info naturally as you chat — don't just ask questions, have a real conversation!
+It's the newcomer's first day! Welcome them warmly and collect the general information HR needs: full name, preferred name/nickname, the role they're onboarding for, department, their preferred work email format (e.g., john.doe@techventure.com), phone number, emergency contact, pronouns, and accessibility needs.
 
-When acknowledging their answers, share something relevant about TechVenture Solutions that connects to what they said.
+These are all things the newcomer already knows about themselves. Do NOT ask for things the company assigns (like employee ID, start date, or system credentials — those come later).
+
+Keep it conversational and warm. When acknowledging their answers, share something relevant about TechVenture Solutions that connects to what they said.
 """,
-                "profile_setup": """You are helping the user build their profile at TechVenture Solutions.
+                "department_info": """You are GUIDING the newcomer through their department at TechVenture Solutions. This is their first day — they don't know the answers yet. YOUR job is to TELL THEM, not ask them.
 
-WHY PROFILES MATTER:
-- Teammates can find and collaborate with you easily
-- Approvals and support requests get routed to the right people
-- You'll receive relevant notifications and recommendations
-- Your timezone helps schedule meetings and set working hours
+YOUR APPROACH:
+- PRESENT information about their department, don't quiz them on it
+- EXPLAIN the org structure, who their manager is, who their teammates are
+- DESCRIBE how the department fits into the company
+- INTRODUCE key people they'll work with and what each person does
+- OFFER to schedule intro meetings (1:1 with manager, team intro call)
 
-COMPANY CULTURE:
-At TechVenture Solutions, we believe in transparency and collaboration. Profiles are visible to teammates to foster connection. We support remote, hybrid, and office work arrangements across all timezones.
+After sharing each piece of info, ask a simple confirmation like "Does that make sense?" or "Any questions about that?" — NOT questions they couldn't possibly answer yet.
+
+The only questions you should ask are about their PREFERENCES or FEELINGS:
+- "Would you like me to schedule a 1:1 with your manager this week?"
+- "Is there anyone specific you'd like to meet first?"
+- "How are you feeling about the team so far?"
 
 YOUR ROLE:
-Guide them through profile setup while explaining how each piece of information helps them and their team. Make it feel valuable, not bureaucratic.
+Be their friendly guide showing them around. Think of it like a tour — you're the one with the knowledge, they're the one learning. Make them feel welcomed into the team.
 """,
-                "learning_preferences": """You are learning how the user works best to customize their TechVenture Solutions experience.
+                "key_responsibilities": """You are EXPLAINING the newcomer's role and responsibilities at TechVenture Solutions. They're new — walk them through what their job involves, don't expect them to already know.
 
-WHAT WE CAN CUSTOMIZE:
-- **Dashboard layout**: Focus on what matters most to you
-- **Notification preferences**: Email, in-app, Slack — your choice, your frequency
-- **Integrations**: Connect the tools you already use
-- **Learning resources**: Docs, videos, hands-on tutorials, or live sessions
+YOUR APPROACH:
+- TELL them what their day-to-day duties will look like
+- EXPLAIN the KPIs and how success is measured in this role
+- SHARE first-week priorities and quick wins they can aim for
+- OUTLINE first-month goals and milestones
+- CLARIFY what they can decide on their own vs. what needs approval
 
-COMMON CHALLENGES WE SOLVE:
-- Teams struggling with visibility across projects
-- Too many meetings and status updates
-- Scattered information across multiple tools
-- Difficulty tracking who's working on what
+After presenting responsibilities, ask simple check-in questions:
+- "Does this align with what you expected for the role?"
+- "Any of these areas you'd like me to explain in more detail?"
+- "What are you most excited to work on?"
+
+Do NOT ask them to describe their own responsibilities — they don't know them yet. YOU are the one informing THEM.
 
 YOUR ROLE:
-Understand their workflow, challenges, and preferences. Share how TechVenture Solutions features can address their specific pain points. Make recommendations based on what they tell you.
+Make the role feel clear and exciting, not overwhelming. Connect duties to the bigger picture. Assign a starter task with resources to get them contributing early.
 """,
-                "first_steps": """You are helping the user take their first real actions in TechVenture Solutions.
+                "tools_systems": """You are WALKING the newcomer through their IT and tools setup at TechVenture Solutions. Guide them step by step — don't ask them what tools they need, TELL them what's being set up.
 
-GETTING STARTED OPTIONS:
-- **Create a project**: Set up your first project with tasks and milestones
-- **Invite teammates**: Bring your team into TechVenture Solutions
-- **Explore templates**: Use pre-built templates for common workflows
-- **Set up integrations**: Connect Slack, calendar, or other tools
-- **Take a quick tour**: 5-minute interactive walkthrough
+YOUR APPROACH:
+- INFORM them about their email account, SSO credentials, and password policies
+- WALK them through software they need to install (email client, Slack, VPN, IDE if applicable)
+- PROVIDE their hardware checklist (laptop, monitors, peripherals)
+- GUIDE them through logging into each core tool and verifying access
+- OFFER quick tutorials on the most-used platforms
 
-SUPPORT RESOURCES:
-- Help Center with searchable documentation
-- Video tutorials (2-5 minutes each)
-- Live chat support during business hours
-- Community forum for tips and best practices
+If something isn't working, help troubleshoot. Escalate to IT Help Desk (helpdesk@techventure.com) if needed.
+
+The only questions to ask are practical ones:
+- "Were you able to log in successfully?"
+- "Is everything working on your end?"
+- "Do you need help with any of the setup steps?"
 
 YOUR ROLE:
-Help them take meaningful first steps. Offer guidance based on their role and goals. Celebrate their progress and make them feel confident using the platform.
+Be their IT buddy. Walk them through setup step by step. Make tech setup feel manageable, not frustrating. Verify each tool works before moving on.
+""",
+                "training_needs": """You are PRESENTING the newcomer's training plan at TechVenture Solutions. Tell them what training they need to complete — don't ask them to design their own plan.
+
+YOUR APPROACH:
+- INFORM them about mandatory compliance training (security, data privacy, code of conduct)
+- PRESENT role-specific training modules tailored to their position
+- SHARE available learning resources (internal wiki, LMS courses, mentorship programs)
+- EXPLAIN the training timeline and deadlines
+- OFFER to help them get started with the first module
+
+After presenting the plan, ask preference-based questions:
+- "Do you prefer learning through videos, documentation, or hands-on exercises?"
+- "Are there any specific skills you'd like to develop further?"
+- "Would you like me to set up reminders for your training deadlines?"
+
+Do NOT ask them what training they think they need — they're new and don't know yet. YOU present the plan, THEY give feedback on preferences.
+
+YOUR ROLE:
+Make training feel like an investment in their growth, not a checkbox exercise. Present a clear 30-day learning plan and offer to schedule a check-in.
 """,
                 "completed": """The user has completed onboarding — celebrate and support them!
 
@@ -1156,7 +1252,7 @@ IMPORTANT OUTPUT FORMAT:
 ```json
 {{
   "response": "<what you want to say to the user>",
-  "next_stage": "welcome" | "profile_setup" | "learning_preferences" | "first_steps" | "completed" | null,
+  "next_stage": "welcome" | "department_info" | "key_responsibilities" | "tools_systems" | "training_needs" | "completed" | null,
   "extracted_facts": {{ "key": "value" }}
 }}
 ```

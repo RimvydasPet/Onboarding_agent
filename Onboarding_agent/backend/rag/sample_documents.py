@@ -62,7 +62,7 @@ def get_sample_documents() -> List[Document]:
             metadata={
                 "source": "account_setup_guide",
                 "category": "setup",
-                "stage": "profile_setup"
+                "stage": "tools_systems"
             }
         ),
         Document(
@@ -93,7 +93,7 @@ def get_sample_documents() -> List[Document]:
             metadata={
                 "source": "project_guide",
                 "category": "projects",
-                "stage": "first_steps"
+                "stage": "key_responsibilities"
             }
         ),
         Document(
@@ -130,7 +130,7 @@ def get_sample_documents() -> List[Document]:
             metadata={
                 "source": "collaboration_guide",
                 "category": "features",
-                "stage": "first_steps"
+                "stage": "tools_systems"
             }
         ),
         Document(
@@ -175,7 +175,7 @@ def get_sample_documents() -> List[Document]:
             metadata={
                 "source": "integrations_guide",
                 "category": "integrations",
-                "stage": "learning_preferences"
+                "stage": "tools_systems"
             }
         ),
         Document(
@@ -213,7 +213,7 @@ def get_sample_documents() -> List[Document]:
             metadata={
                 "source": "security_guide",
                 "category": "security",
-                "stage": "learning_preferences"
+                "stage": "training_needs"
             }
         ),
         Document(
@@ -334,7 +334,7 @@ def get_sample_documents() -> List[Document]:
             metadata={
                 "source": "mobile_guide",
                 "category": "mobile",
-                "stage": "first_steps"
+                "stage": "tools_systems"
             }
         ),
         Document(

@@ -182,24 +182,28 @@ if "resume_kickoff_done" not in st.session_state:
 
 ROLE_STAGE_FIELDS = {
     "developer": {
-        "profile_setup": ["dev_stack", "dev_repo_access", "dev_env"],
-        "learning_preferences": ["dev_workflow", "dev_quality", "dev_integrations"],
-        "first_steps": ["dev_first_task", "dev_access_blockers", "dev_help_area"],
+        "department_info": ["dev_team_structure", "dev_key_repos", "dev_stakeholders"],
+        "key_responsibilities": ["dev_duties", "dev_kpis", "dev_first_tasks"],
+        "tools_systems": ["dev_ide", "dev_ci_cd", "dev_access"],
+        "training_needs": ["dev_onboarding_modules", "dev_skill_gaps", "dev_certifications"],
     },
     "pm": {
-        "profile_setup": ["pm_area", "pm_reporting", "pm_stakeholders"],
-        "learning_preferences": ["pm_planning_style", "pm_pain", "pm_integrations"],
-        "first_steps": ["pm_first_project", "pm_team_invite", "pm_help_area"],
+        "department_info": ["pm_team_structure", "pm_cross_functional", "pm_stakeholders"],
+        "key_responsibilities": ["pm_duties", "pm_kpis", "pm_first_tasks"],
+        "tools_systems": ["pm_project_tools", "pm_reporting_tools", "pm_access"],
+        "training_needs": ["pm_onboarding_modules", "pm_skill_gaps", "pm_certifications"],
     },
     "it_admin": {
-        "profile_setup": ["it_scope", "it_sso", "it_compliance"],
-        "learning_preferences": ["it_integrations", "it_permissions", "it_notifications"],
-        "first_steps": ["it_first_action", "it_users", "it_help_area"],
+        "department_info": ["it_team_structure", "it_infrastructure", "it_stakeholders"],
+        "key_responsibilities": ["it_duties", "it_kpis", "it_first_tasks"],
+        "tools_systems": ["it_admin_tools", "it_monitoring", "it_access"],
+        "training_needs": ["it_onboarding_modules", "it_skill_gaps", "it_certifications"],
     },
     "general": {
-        "profile_setup": ["focus_area"],
-        "learning_preferences": ["preferred_learning"],
-        "first_steps": ["first_setup"],
+        "department_info": ["team_overview"],
+        "key_responsibilities": ["role_duties"],
+        "tools_systems": ["core_tools"],
+        "training_needs": ["learning_path"],
     },
 }
 
@@ -217,7 +221,7 @@ def _role_category(role_value: str | None) -> str:
 
 def _required_fields_for_stage(stage: str, facts: dict) -> list[str]:
     if stage == "welcome":
-        return ["name", "role"]
+        return ["name", "name_alias", "role", "department", "email_preference", "phone_number", "emergency_contact", "pronouns", "accessibility_needs"]
     if stage == "completed":
         return []
     role_cat = _role_category(facts.get("welcome.role"))
@@ -419,10 +423,11 @@ def _generate_comprehensive_onboarding_pdf(user_id: int, session_id: str, facts:
     
     # Stage definitions
     stage_info = [
-        ("welcome", "👋 Welcome", "Basic information and introduction"),
-        ("profile_setup", "👤 Profile Setup", "Personal profile and preferences"),
-        ("learning_preferences", "📚 Learning Preferences", "Work style and learning approach"),
-        ("first_steps", "🚀 First Steps", "Initial actions and setup")
+        ("welcome", "👋 Welcome & Profile Setup", "Name, nickname, role, department, email preference, phone, emergency contact, pronouns, accessibility"),
+        ("department_info", "🏢 Department Information", "Org structure, team directory, and key stakeholders"),
+        ("key_responsibilities", "🎯 Key Responsibilities", "Role duties, KPIs, goals, and initial tasks"),
+        ("tools_systems", "🛠️ Tools & Systems", "IT setup, software, hardware, and access credentials"),
+        ("training_needs", "📚 Training Needs", "Compliance training, skill gaps, and learning paths")
     ]
     
     # Process each stage
@@ -539,10 +544,11 @@ rag = initialize_system()
 st.sidebar.title("🎯 Onboarding Progress")
 
 stages = [
-    ("welcome", "Welcome", "🎉"),
-    ("profile_setup", "Profile Setup", "👤"),
-    ("learning_preferences", "Learning Preferences", "📚"),
-    ("first_steps", "First Steps", "🚀"),
+    ("welcome", "Welcome & Profile Setup", "🎉"),
+    ("department_info", "Department Information", "🏢"),
+    ("key_responsibilities", "Key Responsibilities", "🎯"),
+    ("tools_systems", "Tools & Systems", "🛠️"),
+    ("training_needs", "Training Needs", "📚"),
     ("completed", "Completed", "✅")
 ]
 
@@ -555,6 +561,197 @@ def _derive_current_stage_from_facts(facts: dict) -> str:
             return stage_id
     return "completed"
 
+
+def _is_onboarding_fully_complete(facts: dict) -> bool:
+    """Return True when every onboarding stage has been completed."""
+    for stage_id, _, _ in stages:
+        if stage_id == "completed":
+            continue
+        if not _is_stage_complete(stage_id, facts):
+            return False
+    return True
+
+
+# ---------------------------------------------------------------------------
+# Early check: if onboarding is fully complete, switch to Document Search mode
+# ---------------------------------------------------------------------------
+_early_facts = _get_onboarding_facts(st.session_state.user_id)
+_onboarding_complete = _is_onboarding_fully_complete(_early_facts)
+
+if _onboarding_complete:
+    # Force stage to "completed" so the agent knows we're in post-onboarding mode
+    st.session_state.current_stage = "completed"
+
+    # --- Sidebar for Document Search mode ---
+    st.sidebar.title("📖 Internal Rules Search")
+    st.sidebar.markdown("✅ **Onboarding complete!**")
+    _user_name = _early_facts.get("welcome.name", "")
+    _user_role = _early_facts.get("welcome.role", "")
+    if _user_name:
+        st.sidebar.markdown(f"👤 **{_user_name}**" + (f" — {_user_role}" if _user_role else ""))
+    st.sidebar.markdown("---")
+    st.sidebar.markdown(
+        "Ask any question about company policies, rules, or procedures and "
+        "I'll search our internal documents for you."
+    )
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### 📊 RAG Status")
+    try:
+        _ds_doc_count = rag.vector_store.get_collection_count()
+        st.sidebar.success(f"✅ {_ds_doc_count} documents indexed")
+    except Exception:
+        st.sidebar.warning("⚠️ RAG system initializing...")
+
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### 📄 Onboarding Summary")
+    _ds_completed_stages = [
+        (sid, sname)
+        for sid, sname, _ in stages
+        if sid != "completed" and _is_stage_complete(sid, _early_facts)
+    ]
+    if _ds_completed_stages:
+        _ds_pdf = _generate_comprehensive_onboarding_pdf(
+            user_id=st.session_state.user_id,
+            session_id=st.session_state.session_id,
+            facts=_early_facts,
+        )
+        st.sidebar.download_button(
+            label="📥 Download Complete Summary",
+            data=_ds_pdf,
+            file_name=f"onboarding_summary_{st.session_state.session_id[:8]}.pdf",
+            mime="application/pdf",
+            key="ds_comprehensive_dl",
+            use_container_width=True,
+        )
+
+    if st.sidebar.button("🔄 Restart Onboarding", use_container_width=True, key="ds_restart"):
+        from backend.memory.short_term import ShortTermMemory as _STM
+        try:
+            db = next(get_db())
+            ltm = LongTermMemory(db)
+            ltm.clear_user_memories(st.session_state.user_id)
+            ltm.reset_onboarding_profile(st.session_state.user_id)
+        except Exception as e:
+            logger.warning(f"Could not clear long-term memory: {e}")
+        try:
+            stm = _STM()
+            stm.clear_session(st.session_state.session_id)
+        except Exception as e:
+            logger.warning(f"Could not clear short-term memory: {e}")
+        st.session_state.session_id = str(uuid.uuid4())
+        st.session_state.messages = []
+        st.session_state.current_stage = "welcome"
+        st.session_state.unlocked_stages = {"welcome"}
+        st.session_state.onboarding_started = False
+        st.session_state.resume_kickoff_done = False
+        st.rerun()
+
+    # --- Main area for Document Search mode ---
+    st.markdown(
+        '<div class="main-header">📖 Internal Rules & Policy Search</div>',
+        unsafe_allow_html=True,
+    )
+
+    if _user_name:
+        st.markdown(
+            f'<p style="text-align:center;color:#666;">Welcome back, <strong>{_user_name}</strong>! '
+            f'Your onboarding is complete. Ask me anything about company policies, rules, or procedures.</p>',
+            unsafe_allow_html=True,
+        )
+    else:
+        st.markdown(
+            '<p style="text-align:center;color:#666;">Your onboarding is complete. '
+            'Ask me anything about company policies, rules, or procedures.</p>',
+            unsafe_allow_html=True,
+        )
+
+    st.markdown("---")
+
+    # Initialise document-search message history (separate from onboarding messages)
+    if "ds_messages" not in st.session_state:
+        st.session_state.ds_messages = []
+
+    # Display document-search conversation
+    for _ds_msg in st.session_state.ds_messages:
+        if _ds_msg["role"] == "user":
+            st.markdown(
+                f'<div class="chat-message user-message"><strong>You:</strong><br>{_ds_msg["content"]}</div>',
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown(
+                f'<div class="chat-message assistant-message"><strong>📖 Assistant:</strong><br>{_ds_msg["content"]}</div>',
+                unsafe_allow_html=True,
+            )
+            if _ds_msg.get("sources"):
+                with st.expander(f"📚 Sources ({len(_ds_msg['sources'])})"):
+                    for _si, _src in enumerate(_ds_msg["sources"], 1):
+                        _src_display = _src.get("file_name") or _src.get("source", "unknown")
+                        st.markdown(
+                            f'<div class="source-card">'
+                            f'<strong>Source {_si}:</strong> {_src_display}<br>'
+                            f'<strong>Category:</strong> {_src.get("category", "general")}<br>'
+                            f'<strong>Relevance:</strong> {_src.get("score", 0):.2f}<br>'
+                            f'<em>{_src.get("preview", "")}</em>'
+                            f'</div>',
+                            unsafe_allow_html=True,
+                        )
+
+    # Chat input for document search
+    _ds_input = st.chat_input("Search internal rules and policies...")
+
+    if _ds_input:
+        st.session_state.ds_messages.append({
+            "role": "user",
+            "content": _ds_input,
+            "timestamp": datetime.now().isoformat(),
+        })
+
+        with st.spinner("🔍 Searching internal documents..."):
+            try:
+                _ds_result = run_agent(
+                    user_input=_ds_input,
+                    user_id=st.session_state.user_id,
+                    session_id=st.session_state.session_id,
+                    current_stage="completed",
+                    history=[
+                        {"role": m["role"], "content": m["content"]}
+                        for m in st.session_state.ds_messages[-6:]
+                    ],
+                )
+                st.session_state.ds_messages.append({
+                    "role": "assistant",
+                    "content": _ds_result["response"],
+                    "sources": _ds_result.get("sources", []),
+                    "timestamp": datetime.now().isoformat(),
+                })
+            except Exception as e:
+                logger.error(f"Document search error: {e}")
+                st.session_state.ds_messages.append({
+                    "role": "assistant",
+                    "content": f"Sorry, I encountered an error while searching: {e}",
+                    "sources": [],
+                    "timestamp": datetime.now().isoformat(),
+                })
+        st.rerun()
+
+    # Footer metrics
+    st.markdown("---")
+    _fc1, _fc2 = st.columns(2)
+    with _fc1:
+        st.metric("💬 Messages", len(st.session_state.ds_messages))
+    with _fc2:
+        try:
+            _ds_dc = rag.vector_store.get_collection_count()
+            st.metric("📚 Knowledge Base", f"{_ds_dc} docs")
+        except Exception:
+            st.metric("📚 Knowledge Base", "Loading...")
+
+    st.stop()  # Skip the entire onboarding UI below
+
+# ---------------------------------------------------------------------------
+# Normal onboarding flow (onboarding NOT yet complete)
+# ---------------------------------------------------------------------------
 current_stage_index = next((i for i, s in enumerate(stages) if s[0] == st.session_state.current_stage), 0)
 
 for i, (stage_id, stage_name, emoji) in enumerate(stages):
@@ -625,7 +822,7 @@ with st.sidebar.expander("Developers info", expanded=False):
         ltm = LongTermMemory(db)
 
         stage_rows = []
-        for _stage_key in ["profile_setup", "learning_preferences", "first_steps"]:
+        for _stage_key in ["department_info", "key_responsibilities", "tools_systems", "training_needs"]:
             bank_key = AgentNodes._generated_bank_cache_key(_role, _stage_key)
             research_key = AgentNodes._role_research_cache_key(_role, _stage_key)
             cached_bank = ltm.get_memory(st.session_state.user_id, "onboarding_generated", bank_key)
@@ -653,7 +850,7 @@ with st.sidebar.expander("Developers info", expanded=False):
     )
     _upload_stage = st.selectbox(
         "Upload stage (optional)",
-        options=["", "welcome", "profile_setup", "learning_preferences", "first_steps"],
+        options=["", "welcome", "department_info", "key_responsibilities", "tools_systems", "training_needs"],
         key="dev_upload_stage",
     )
     _uploaded_files = st.file_uploader(
@@ -938,11 +1135,12 @@ if (
     stage_title = stage_titles.get(st.session_state.current_stage, st.session_state.current_stage)
 
     intro_body = {
-        "welcome": "At TechVenture Solutions, we're committed to making your onboarding experience smooth and engaging.",
-        "profile_setup": "Now let's set up your profile. This is important because it helps personalize your experience, improves collaboration, and ensures approvals/support requests reach the right people.",
-        "learning_preferences": "Next we'll learn your working style and preferences. This matters because we can tailor dashboards, integrations, and notifications so TechVenture supports your workflow — not distracts from it.",
-        "first_steps": "Now we'll take your first real actions. This stage is important because it gets you productive quickly: access, integrations, and setting up your first project so you can start delivering results.",
-        "completed": "You're all set. This stage is important because it confirms you're ready to work independently, and it gives you clear next steps to explore advanced features and get ongoing support."
+        "welcome": "At TechVenture Solutions, we're committed to making your onboarding experience smooth and engaging. Let's start by getting to know you!",
+        "department_info": "Let's get you familiar with your team and department! We'll cover the org structure, introduce key stakeholders, and schedule some intro meetings.",
+        "key_responsibilities": "Now let's outline your role in detail — duties, KPIs, goals, and initial tasks to get you started.",
+        "tools_systems": "Time to get your tech stack set up! We'll walk through IT access, software installs, and make sure everything works.",
+        "training_needs": "Let's build your personalized learning path — compliance training, role-specific modules, and skill development.",
+        "completed": "You're all set! You're ready to work independently with clear next steps to explore advanced features and get ongoing support."
     }.get(st.session_state.current_stage, "Let's continue your onboarding journey.")
 
     st.markdown(f"""
@@ -1172,11 +1370,12 @@ if len(st.session_state.messages) == 0:
         _next_stage_title = _stage_titles.get(_resume_next_stage_id, _resume_next_stage_id)
 
         _next_intro_body = {
-            "welcome": "At TechVenture Solutions, we're committed to making your onboarding experience smooth and engaging.",
-            "profile_setup": "Now let's set up your profile. This is important because it helps personalize your experience, improves collaboration, and ensures approvals/support requests reach the right people.",
-            "learning_preferences": "Next we'll learn your working style and preferences. This matters because we can tailor dashboards, integrations, and notifications so TechVenture supports your workflow — not distracts from it.",
-            "first_steps": "Now we'll take your first real actions. This stage is important because it gets you productive quickly: access, integrations, and setting up your first project so you can start delivering results.",
-            "completed": "You're all set. This stage is important because it confirms you're ready to work independently, and it gives you clear next steps to explore advanced features and get ongoing support."
+            "welcome": "At TechVenture Solutions, we're committed to making your onboarding experience smooth and engaging. Let's start by getting to know you!",
+            "department_info": "Let's get you familiar with your team and department! We'll cover the org structure, introduce key stakeholders, and schedule some intro meetings.",
+            "key_responsibilities": "Now let's outline your role in detail — duties, KPIs, goals, and initial tasks to get you started.",
+            "tools_systems": "Time to get your tech stack set up! We'll walk through IT access, software installs, and make sure everything works.",
+            "training_needs": "Let's build your personalized learning path — compliance training, role-specific modules, and skill development.",
+            "completed": "You're all set! You're ready to work independently with clear next steps to explore advanced features and get ongoing support."
         }.get(_resume_next_stage_id, "Let's continue your onboarding journey.")
 
         st.markdown(f"""
