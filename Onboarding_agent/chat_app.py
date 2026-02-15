@@ -179,6 +179,12 @@ if "onboarding_started" not in st.session_state:
 if "resume_kickoff_done" not in st.session_state:
     st.session_state.resume_kickoff_done = False
 
+if "last_stage" not in st.session_state:
+    st.session_state.last_stage = None
+
+if "revisit_message_shown" not in st.session_state:
+    st.session_state.revisit_message_shown = False
+
 
 ROLE_STAGE_FIELDS = {
     "developer": {
@@ -390,19 +396,21 @@ def _generate_comprehensive_onboarding_pdf(user_id: int, session_id: str, facts:
     
     # Header
     story.append(Paragraph("🎯 TechVenture Solutions", title_style))
-    story.append(Paragraph("Onboarding Summary Report", subtitle_style))
     
     # Metadata table
     user_name = facts.get('welcome.name', 'N/A')
+    user_surname = facts.get('welcome.name_alias', '')
     user_role = facts.get('welcome.role', 'N/A')
-
-    session_id_text = str(session_id or 'N/A')
-    session_id_cell = Paragraph(session_id_text, session_id_style)
+    
+    # Create title with name and surname
+    full_name = user_name
+    if user_surname:
+        full_name = f"{user_name} {user_surname}"
+    
+    story.append(Paragraph(f"Onboarding Summary Report — {full_name}", subtitle_style))
     
     metadata = [
-        ['Participant:', user_name],
         ['Role:', user_role],
-        ['Session ID:', session_id_cell],
         ['Generated:', datetime.now().strftime('%B %d, %Y at %I:%M %p')]
     ]
     
@@ -763,6 +771,48 @@ for i, (stage_id, stage_name, emoji) in enumerate(stages):
         st.sidebar.markdown(f"{emoji} {stage_name}")
 
 st.sidebar.markdown("---")
+
+# Go Back feature - allow users to revisit completed stages
+if current_stage_index > 0:
+    st.sidebar.markdown("### 🔙 Revisit a Stage")
+    completed_stages = [
+        (stages[i][0], stages[i][1])
+        for i in range(current_stage_index)
+        if stages[i][0] != "completed"
+    ]
+    if completed_stages:
+        go_back_stage = st.sidebar.selectbox(
+            "Select a stage to revisit:",
+            options=completed_stages,
+            format_func=lambda x: x[1],
+            key="go_back_stage_selector"
+        )
+        col_back_1, col_back_2 = st.sidebar.columns(2)
+        with col_back_1:
+            if st.button("📖 Go Back", use_container_width=True, key="go_back_button"):
+                st.session_state.current_stage = go_back_stage[0]
+                st.session_state.revisit_message_shown = False
+                st.rerun()
+        with col_back_2:
+            # Find the actual current progress stage (the one before "completed")
+            current_progress_stage = None
+            for i in range(len(stages) - 1, -1, -1):
+                if stages[i][0] != "completed" and _is_stage_complete(stages[i][0], _early_facts):
+                    current_progress_stage = stages[i][0]
+                    break
+            if current_progress_stage is None:
+                # If no stage is complete, find the first incomplete stage
+                for stage_id, _, _ in stages:
+                    if stage_id != "completed" and not _is_stage_complete(stage_id, _early_facts):
+                        current_progress_stage = stage_id
+                        break
+            
+            if current_progress_stage and current_progress_stage != st.session_state.current_stage:
+                if st.button("↩️ Current", use_container_width=True, key="back_to_current_button"):
+                    st.session_state.current_stage = current_progress_stage
+                    st.session_state.revisit_message_shown = False
+                    st.rerun()
+    st.sidebar.markdown("---")
 
 with st.sidebar.expander("Developers info", expanded=False):
     st.markdown("**Session:**")
@@ -1210,6 +1260,27 @@ for message in st.session_state.messages:
 
 user_input = None
 if has_existing_progress or st.session_state.onboarding_started:
+    # Check if user is revisiting a stage and show a special message
+    if (
+        not st.session_state.revisit_message_shown
+        and st.session_state.last_stage is not None
+        and st.session_state.last_stage != st.session_state.current_stage
+        and st.session_state.current_stage != "welcome"
+    ):
+        # User went back to a previous stage
+        st.session_state.messages.append({
+            "role": "assistant",
+            "content": "Did you forget something to ask? Feel free to ask anything! 😊",
+            "stage": st.session_state.current_stage,
+            "timestamp": datetime.now().isoformat()
+        })
+        st.session_state.revisit_message_shown = True
+        st.rerun()
+    
+    # Update last_stage for next iteration
+    if st.session_state.last_stage != st.session_state.current_stage:
+        st.session_state.last_stage = st.session_state.current_stage
+    
     _last_msg = st.session_state.messages[-1] if st.session_state.messages else None
     _last_content = (
         str(_last_msg.get("content") or "").lower()
