@@ -101,7 +101,7 @@ class AgentNodes:
 
     _STAGE_INTRODUCTIONS: Dict[str, str] = {
         "department_info": (
-            "� **Department Information**\n\n"
+            "🏢 **Department Information**\n\n"
             "Let's get you familiar with your team and department! I'll share the org structure, "
             "introduce key stakeholders, and help you understand how your department fits into "
             "TechVenture Solutions. We'll also schedule some intro meetings for you."
@@ -113,7 +113,7 @@ class AgentNodes:
             "I'll also assign some initial tasks to get you started."
         ),
         "tools_systems": (
-            "�️ **Tools & Systems**\n\n"
+            "🛠️ **Tools & Systems**\n\n"
             "Time to get your tech stack set up! We'll walk through IT access, software installs, "
             "hardware checklist, and make sure you can log into everything you need. "
             "I'll guide you through tutorials and troubleshoot any issues."
@@ -308,10 +308,44 @@ class AgentNodes:
 
         stage = self._normalize_stage_key(stage)
 
-        prompt = f"""You are creating a role-specific onboarding plan for a new hire.
+        stage_guidance = {
+            "department_info": (
+                "This stage is about TELLING the newcomer about their department. "
+                "Generate questions that CHECK UNDERSTANDING or ask about PREFERENCES — "
+                "e.g., 'Does that make sense?', 'Would you like me to schedule a 1:1 with your manager?', "
+                "'Is there anyone specific you'd like to meet first?'"
+            ),
+            "key_responsibilities": (
+                "This stage is about EXPLAINING the newcomer's responsibilities. "
+                "Generate questions that CONFIRM ALIGNMENT or ask about INTEREST — "
+                "e.g., 'Does this align with what you expected?', 'Which area are you most excited about?', "
+                "'Would you like more detail on any of these responsibilities?'"
+            ),
+            "tools_systems": (
+                "This stage is about WALKING the newcomer through IT setup. "
+                "Generate questions that CHECK PROGRESS or ask about ISSUES — "
+                "e.g., 'Were you able to log in?', 'Is everything working?', "
+                "'Do you need help with any setup steps?'"
+            ),
+            "training_needs": (
+                "This stage is about PRESENTING the training plan. "
+                "Generate questions that ask about LEARNING PREFERENCES — "
+                "e.g., 'Do you prefer videos or documentation?', 'Any specific skills you want to develop?', "
+                "'Would you like reminders for training deadlines?'"
+            ),
+        }
+
+        stage_hint = stage_guidance.get(stage, "Generate preference or confirmation questions.")
+
+        prompt = f"""You are creating a role-specific onboarding guide for a new hire's FIRST DAY.
 
 ROLE: {role}
 STAGE: {stage}
+
+IMPORTANT CONTEXT: The newcomer is brand new — they don't know anything about the company yet.
+Your job is to generate content that GUIDES and INFORMS them, NOT quiz them on things they can't know.
+
+{stage_hint}
 
 Use the following web research snippets as background:
 {research_block}
@@ -323,9 +357,12 @@ Return ONLY valid JSON with this schema:
 }}
 
 Rules:
-- Provide 5-10 checklist items relevant to the role (can be general, not stage-specific).
+- Provide 5-10 checklist items relevant to the role and stage.
 - Provide 3-5 questions ONLY for the given STAGE.
-- Questions must be specific to the role and phrased conversationally.
+- Questions must be PREFERENCE, CONFIRMATION, or FEEDBACK questions — things the newcomer CAN answer.
+- NEVER ask the newcomer to explain company structure, processes, or tools they haven't learned yet.
+- Good: "Does that make sense?", "Would you like to know more about X?", "Any questions so far?"
+- Bad: "Can you describe the department structure?", "What tools does your team use?"
 - Do NOT generate questions for the welcome stage (name/role are handled separately).
 """
 
@@ -420,7 +457,14 @@ Rules:
         search_error = None
         if provider == "tavily":
             try:
-                research_results = self._tavily_search(f"{role} onboarding questions {stage}", max_results=6)
+                stage_search_focus = {
+                    "department_info": f"{role} onboarding department structure team introduction first day",
+                    "key_responsibilities": f"{role} job responsibilities KPIs first week goals onboarding",
+                    "tools_systems": f"{role} IT setup tools software access onboarding first day",
+                    "training_needs": f"{role} onboarding training plan compliance learning path",
+                }
+                search_query = stage_search_focus.get(stage, f"{role} onboarding {stage}")
+                research_results = self._tavily_search(search_query, max_results=6)
             except Exception as e:
                 search_error = str(e)
                 logger.warning(f"Web search failed: {e}")
@@ -815,6 +859,10 @@ Rules:
         try:
             current_stage = self._normalize_stage_key(state.get("current_stage"))
             onboarding_facts = dict(state.get("onboarding_facts") or {})
+
+            # --- Post-onboarding document search mode ---
+            if current_stage == "completed":
+                return self._handle_document_search(state, onboarding_facts)
 
             qa_pending_stage = str(onboarding_facts.get("qa.pending_stage") or "").strip()
             user_text = str(state.get("user_input") or "").strip()

@@ -91,7 +91,7 @@ stages = [
     ("department_info", "Department Information", "🏢"),
     ("key_responsibilities", "Key Responsibilities", "🎯"),
     ("tools_systems", "Tools & Systems", "🛠️"),
-    ("training_needs", "Training Needs", "�"),
+    ("training_needs", "Training Needs", "📚"),
     ("completed", "Completed", "✅")
 ]
 
