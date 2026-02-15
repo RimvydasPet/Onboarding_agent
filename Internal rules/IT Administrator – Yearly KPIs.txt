@@ -1,0 +1,13 @@
+IT Administrator – Yearly KPIs
+| Category                 | KPI                               | Weight | Target           | Measurement Frequency |
+| ------------------------ | --------------------------------- | ------ | ---------------- | --------------------- |
+| Service Availability     | Infrastructure uptime             | 20%    | ≥ 99.9%          | Monthly               |
+| Incident Management      | Mean Time to Resolve (MTTR)       | 15%    | ≤ X hours        | Monthly               |
+| Incident Management      | SLA-compliant incident resolution | 10%    | ≥ 95%            | Monthly               |
+| Service Desk Experience  | User satisfaction (CSAT)          | 10%    | ≥ 4.5 / 5        | Quarterly             |
+| Change & Release Quality | Incidents caused by changes       | 5%     | ≤ 2 / quarter    | Quarterly             |
+| Security & Compliance    | MFA coverage (eligible accounts)  | 10%    | ≥ 98% enabled    | Quarterly             |
+| Security & Compliance    | High/critical security incidents  | 10%    | 0–2 per year     | Quarterly             |
+| Asset & License Hygiene  | Endpoint compliance (patch level) | 5%     | ≥ 95% compliant  | Monthly               |
+| Asset & License Hygiene  | License optimization initiatives  | 5%     | ≥ X €/year saved | Yearly                |
+| Projects & Improvements  | Delivery of agreed initiatives    | 10%    | ≥ 90% on time    | Yearly                |

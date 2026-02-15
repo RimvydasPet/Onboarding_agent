@@ -869,7 +869,7 @@ with st.sidebar.expander("Developers info", expanded=False):
             except Exception:
                 Document = None
 
-            upload_root = (Path(__file__).resolve().parent / "uploaded_docs")
+            upload_root = (Path(__file__).resolve().parent.parent / "Internal rules")
             upload_root.mkdir(parents=True, exist_ok=True)
 
             docs_to_add = []
@@ -895,7 +895,12 @@ with st.sidebar.expander("Developers info", expanded=False):
                 else:
                     text = raw.decode("utf-8", errors="replace")
 
-                safe_name = f"{upload_id}_{Path(file_name).name}"
+                safe_name = Path(file_name).name
+                # If a file with the same name already exists, add the upload_id to avoid overwriting
+                if (upload_root / safe_name).exists():
+                    stem = Path(file_name).stem
+                    suffix = Path(file_name).suffix
+                    safe_name = f"{stem}_{upload_id[:8]}{suffix}"
                 (upload_root / safe_name).write_bytes(raw)
                 saved += 1
 
@@ -950,7 +955,7 @@ with st.sidebar.expander("Developers info", expanded=False):
 
         with col_del_b:
             if st.button("🧹 Delete raw file(s)", use_container_width=True, key="dev_delete_raw"):
-                upload_root = (Path(__file__).resolve().parent / "uploaded_docs")
+                upload_root = (Path(__file__).resolve().parent.parent / "Internal rules")
                 deleted = 0
                 if upload_root.exists() and _selected_upload_id:
                     for p in upload_root.glob(f"{_selected_upload_id}_*"):
