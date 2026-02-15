@@ -244,6 +244,98 @@ class AgentNodes:
                 missing.append((field_key, question))
         return missing
 
+    @staticmethod
+    def _is_meta_question(user_input: str) -> bool:
+        """Return True if the user is asking ABOUT the current onboarding question
+        rather than answering it (e.g. 'why does this matter?', 'what is the
+        purpose of this question?')."""
+        text = user_input.strip().lower()
+        meta_patterns = [
+            "why this question",
+            "why do you ask",
+            "why are you asking",
+            "why does this matter",
+            "why does it matter",
+            "why is this important",
+            "why is that important",
+            "what is the purpose",
+            "what's the purpose",
+            "whats the purpose",
+            "purpose of this question",
+            "purpose of that question",
+            "why do you need",
+            "why do you want to know",
+            "why do i need to answer",
+            "what does this have to do",
+            "why is this relevant",
+            "why is this needed",
+            "why should i answer",
+            "what for",
+            "why is this asked",
+            "why ask this",
+            "why ask that",
+            "can you explain why",
+            "explain why you ask",
+            "what's the point",
+            "whats the point",
+            "why does this question matter",
+            "why this matters",
+            "how is this relevant",
+            "is this really necessary",
+            "do i have to answer",
+            "why do you need this",
+            "why do you need that",
+        ]
+        return any(p in text for p in meta_patterns)
+
+    def _handle_meta_question(
+        self,
+        state: OnboardingAgentState,
+        current_stage: str,
+        current_question: str,
+        onboarding_facts: dict,
+    ) -> OnboardingAgentState:
+        """Use the LLM to explain why the current onboarding question matters,
+        then re-ask the same question so the user can still answer it."""
+        user_input = str(state.get("user_input") or "").strip()
+        logger.info(f"Meta-question detected – explaining: {user_input[:120]}")
+
+        system_prompt = (
+            "You are a friendly onboarding assistant for TechVenture Solutions.\n"
+            "The newcomer was asked the following onboarding question:\n\n"
+            f"  \"{current_question}\"\n\n"
+            "Instead of answering, they want to know WHY this question is being asked "
+            "or what purpose it serves.\n\n"
+            "Explain briefly (2-4 sentences) why this question matters for their "
+            "onboarding experience, how the information will be used, and why it "
+            "benefits them. Be warm and reassuring — never make them feel forced.\n\n"
+            "After your explanation, politely re-ask the same question so they can "
+            "answer it when ready."
+        )
+
+        try:
+            messages = [
+                SystemMessage(content=system_prompt),
+                HumanMessage(content=user_input),
+            ]
+            llm_response = self.llm.invoke(messages)
+            answer = (llm_response.content or "").strip()
+            if not answer:
+                raise ValueError("Empty LLM response")
+        except Exception as e:
+            logger.error(f"LLM failed explaining meta-question: {e}")
+            answer = (
+                f"Great question! We ask this to make your onboarding experience as "
+                f"smooth and personalised as possible. The information helps us tailor "
+                f"the process to your needs.\n\n{current_question}"
+            )
+
+        state["response"] = answer
+        state["next_stage"] = None
+        state["extracted_facts"] = {}
+        state["onboarding_facts"] = onboarding_facts
+        return state
+
     def _tavily_search(self, query: str, max_results: int = 5) -> list[dict[str, Any]]:
         api_key = str(getattr(settings, "TAVILY_API_KEY", "") or "").strip()
         if not api_key:
@@ -1051,6 +1143,16 @@ Rules:
 
             if current_field_key and current_question:
                 answer = str(state.get("user_input") or "").strip()
+
+                # --- Meta-question detection ---
+                # If the user is asking ABOUT the current question (why it matters,
+                # what its purpose is, etc.) instead of answering it, explain and
+                # re-ask the same question without saving anything.
+                if answer and self._is_meta_question(answer):
+                    return self._handle_meta_question(
+                        state, current_stage, current_question, onboarding_facts
+                    )
+
                 if answer:
                     if current_stage == "welcome" and current_field_key == "name":
                         answer = self._deduplicate_name(answer)

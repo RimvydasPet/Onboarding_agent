@@ -841,7 +841,7 @@ with st.sidebar.expander("Developers info", expanded=False):
         st.caption(f"Debug unavailable: {type(e).__name__}")
 
     st.markdown("---")
-    st.markdown("**Upload Markdown to RAG**")
+    st.markdown("**Upload Documents to RAG**")
     _upload_category = st.text_input(
         "Upload category",
         value="uploaded",
@@ -854,8 +854,8 @@ with st.sidebar.expander("Developers info", expanded=False):
         key="dev_upload_stage",
     )
     _uploaded_files = st.file_uploader(
-        "Upload .md files",
-        type=["md", "markdown"],
+        "Upload .md, .pdf, or .txt files",
+        type=["md", "markdown", "pdf", "txt"],
         accept_multiple_files=True,
         key="dev_upload_files",
         label_visibility="collapsed",
@@ -881,7 +881,19 @@ with st.sidebar.expander("Developers info", expanded=False):
                     raw = f.getvalue()
                 except Exception:
                     raw = f.read()
-                text = raw.decode("utf-8", errors="replace")
+
+                if file_name.lower().endswith(".pdf"):
+                    try:
+                        from PyPDF2 import PdfReader
+                        reader = PdfReader(BytesIO(raw))
+                        text = "\n".join(
+                            page.extract_text() or "" for page in reader.pages
+                        )
+                    except Exception as pdf_err:
+                        st.warning(f"Could not extract text from {file_name}: {pdf_err}")
+                        continue
+                else:
+                    text = raw.decode("utf-8", errors="replace")
 
                 safe_name = f"{upload_id}_{Path(file_name).name}"
                 (upload_root / safe_name).write_bytes(raw)
@@ -901,7 +913,7 @@ with st.sidebar.expander("Developers info", expanded=False):
                 else:
                     docs_to_add.append(rag.document_processor.create_document(content=text, metadata=meta, source=Path(file_name).name))
 
-            with st.spinner("Indexing uploaded markdown..."):
+            with st.spinner("Indexing uploaded documents..."):
                 rag.initialize_knowledge_base(docs_to_add)
 
             st.success(f"Ingested {len(docs_to_add)} file(s) and saved {saved} raw file(s) to {upload_root}")
