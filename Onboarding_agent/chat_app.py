@@ -227,7 +227,7 @@ def _role_category(role_value: str | None) -> str:
 
 def _required_fields_for_stage(stage: str, facts: dict) -> list[str]:
     if stage == "welcome":
-        return ["name", "name_alias", "role", "department", "email_preference", "phone_number", "emergency_contact", "pronouns", "accessibility_needs"]
+        return ["name", "role", "department", "email_preference", "phone_number", "emergency_contact", "pronouns", "accessibility_needs"]
     if stage == "completed":
         return []
     role_cat = _role_category(facts.get("welcome.role"))

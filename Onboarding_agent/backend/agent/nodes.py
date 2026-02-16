@@ -23,7 +23,6 @@ class AgentNodes:
     _STAGE_FIELDS: Dict[str, list[tuple[str, str]]] = {
         "welcome": [
             ("name", "Welcome to your first day! What's your full name?"),
-            ("name_alias", "Do you go by a nickname or preferred name? (Type 'no' if your full name is fine)"),
             ("role", "What role or position are you onboarding for? (e.g., IT Admin, Developer, Project Manager)"),
             ("department", "Which department are you joining?"),
             ("email_preference", "We'll set up your work email — what format would you prefer? (e.g., john.doe, jdoe, john.d)"),
@@ -1043,11 +1042,20 @@ Rules:
                 # User is asking a question in Q&A mode — answer from RAG docs with fallback.
                 return self._handle_qa_question(state, current_stage, onboarding_facts)
 
-            # If qa_pending_stage is set for a DIFFERENT stage (edge case), clear it.
+            # If qa_pending_stage is set for a DIFFERENT stage, user manually went back.
+            # Show the QA prompt for the revisited stage.
             if qa_pending_stage and qa_pending_stage != current_stage:
-                onboarding_facts["qa.pending_stage"] = ""
+                onboarding_facts["qa.pending_stage"] = current_stage
                 state["onboarding_facts"] = onboarding_facts
-                state["extracted_facts"] = {"qa.pending_stage": ""}
+                state["extracted_facts"] = {"qa.pending_stage": current_stage}
+                
+                qa_prompt = self._STAGE_QA_PROMPTS.get(
+                    current_stage,
+                    "Do you have any questions about this stage? I can look up answers from our company documents. When you're ready, say **'move on'** to continue."
+                )
+                state["response"] = qa_prompt
+                state["next_stage"] = None
+                return state
 
             missing_before = self._missing_fields(
                 current_stage,
