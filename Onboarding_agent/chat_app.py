@@ -793,20 +793,21 @@ if current_stage_index > 0:
                 st.session_state.current_stage = go_back_stage[0]
                 st.session_state.revisit_message_shown = False
                 st.rerun()
-        with col_back_2:
-            # Find the actual current progress stage (the one before "completed")
-            current_progress_stage = None
-            for i in range(len(stages) - 1, -1, -1):
-                if stages[i][0] != "completed" and _is_stage_complete(stages[i][0], _early_facts):
-                    current_progress_stage = stages[i][0]
+        
+        # Find the actual current progress stage (the one before "completed")
+        current_progress_stage = None
+        for i in range(len(stages) - 1, -1, -1):
+            if stages[i][0] != "completed" and _is_stage_complete(stages[i][0], _early_facts):
+                current_progress_stage = stages[i][0]
+                break
+        if current_progress_stage is None:
+            # If no stage is complete, find the first incomplete stage
+            for stage_id, _, _ in stages:
+                if stage_id != "completed" and not _is_stage_complete(stage_id, _early_facts):
+                    current_progress_stage = stage_id
                     break
-            if current_progress_stage is None:
-                # If no stage is complete, find the first incomplete stage
-                for stage_id, _, _ in stages:
-                    if stage_id != "completed" and not _is_stage_complete(stage_id, _early_facts):
-                        current_progress_stage = stage_id
-                        break
-            
+        
+        with col_back_2:
             if current_progress_stage and current_progress_stage != st.session_state.current_stage:
                 if st.button("↩️ Current", use_container_width=True, key="back_to_current_button"):
                     st.session_state.current_stage = current_progress_stage
@@ -1219,7 +1220,7 @@ if (
     </div>
     """, unsafe_allow_html=True)
 
-for message in st.session_state.messages:
+for message in current_stage_messages:
     role = message["role"]
     content = message["content"]
     
@@ -1260,23 +1261,6 @@ for message in st.session_state.messages:
 
 user_input = None
 if has_existing_progress or st.session_state.onboarding_started:
-    # Check if user is revisiting a stage and show a special message
-    if (
-        not st.session_state.revisit_message_shown
-        and st.session_state.last_stage is not None
-        and st.session_state.last_stage != st.session_state.current_stage
-        and st.session_state.current_stage != "welcome"
-    ):
-        # User went back to a previous stage
-        st.session_state.messages.append({
-            "role": "assistant",
-            "content": "Did you forget something to ask? Feel free to ask anything! 😊",
-            "stage": st.session_state.current_stage,
-            "timestamp": datetime.now().isoformat()
-        })
-        st.session_state.revisit_message_shown = True
-        st.rerun()
-    
     # Update last_stage for next iteration
     if st.session_state.last_stage != st.session_state.current_stage:
         st.session_state.last_stage = st.session_state.current_stage
