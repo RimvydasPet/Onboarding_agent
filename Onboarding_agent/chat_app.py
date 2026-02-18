@@ -876,8 +876,6 @@ if _is_admin_user:
     
     st.stop()
 
-st.sidebar.title("🎯 Onboarding Progress")
-
 stages = [
     ("welcome", "Welcome & Profile Setup", "🎉"),
     ("department_info", "Department Information", "🏢"),
@@ -979,28 +977,6 @@ if _onboarding_complete:
                 key="user_resources_dl",
                 use_container_width=True,
             )
-
-    if st.sidebar.button("🔄 Restart Onboarding", use_container_width=True, key="ds_restart"):
-        from backend.memory.short_term import ShortTermMemory as _STM
-        try:
-            db = next(get_db())
-            ltm = LongTermMemory(db)
-            ltm.clear_user_memories(st.session_state.user_id)
-            ltm.reset_onboarding_profile(st.session_state.user_id)
-        except Exception as e:
-            logger.warning(f"Could not clear long-term memory: {e}")
-        try:
-            stm = _STM()
-            stm.clear_session(st.session_state.session_id)
-        except Exception as e:
-            logger.warning(f"Could not clear short-term memory: {e}")
-        st.session_state.session_id = str(uuid.uuid4())
-        st.session_state.messages = []
-        st.session_state.current_stage = "welcome"
-        st.session_state.unlocked_stages = {"welcome"}
-        st.session_state.onboarding_started = False
-        st.session_state.resume_kickoff_done = False
-        st.rerun()
 
     # --- Main area for Document Search mode ---
     st.markdown(
@@ -1139,6 +1115,7 @@ if _onboarding_complete:
 # ---------------------------------------------------------------------------
 current_stage_index = next((i for i, s in enumerate(stages) if s[0] == st.session_state.current_stage), 0)
 
+st.sidebar.markdown("### 📋 Onboarding Progress")
 for i, (stage_id, stage_name, emoji) in enumerate(stages):
     if i < current_stage_index:
         st.sidebar.markdown(f"{emoji} ~~{stage_name}~~ ✓")
@@ -1150,51 +1127,64 @@ for i, (stage_id, stage_name, emoji) in enumerate(stages):
 st.sidebar.markdown("---")
 
 # Go Back feature - allow users to revisit completed stages
-if current_stage_index > 0:
-    st.sidebar.markdown("### 🔙 Revisit a Stage")
-    completed_stages = [
-        (stages[i][0], stages[i][1])
-        for i in range(current_stage_index)
-        if stages[i][0] != "completed"
-    ]
-    if completed_stages:
-        go_back_stage = st.sidebar.selectbox(
-            "Select a stage to revisit:",
-            options=completed_stages,
-            format_func=lambda x: x[1],
-            key="go_back_stage_selector"
-        )
-        col_back_1, col_back_2 = st.sidebar.columns(2)
-        with col_back_1:
-            if st.button("📖 Go Back", use_container_width=True, key="go_back_button"):
-                st.session_state.current_stage = go_back_stage[0]
+st.sidebar.markdown("### 🔙 Revisit a Stage")
+completed_stages = [
+    (stages[i][0], stages[i][1])
+    for i in range(len(stages))
+    if stages[i][0] != "completed" and _is_stage_complete(stages[i][0], _early_facts)
+]
+if completed_stages:
+    go_back_stage = st.sidebar.selectbox(
+        "Select a stage to revisit:",
+        options=completed_stages,
+        format_func=lambda x: x[1],
+        key="go_back_stage_selector"
+    )
+    # Find the actual current progress stage (the one before "completed")
+    current_progress_stage = None
+    for i in range(len(stages) - 1, -1, -1):
+        if stages[i][0] != "completed" and _is_stage_complete(stages[i][0], _early_facts):
+            current_progress_stage = stages[i][0]
+            break
+    if current_progress_stage is None:
+        # If no stage is complete, find the first incomplete stage
+        for stage_id, _, _ in stages:
+            if stage_id != "completed" and not _is_stage_complete(stage_id, _early_facts):
+                current_progress_stage = stage_id
+                break
+    
+    col_back_1, col_back_2 = st.sidebar.columns(2)
+    with col_back_1:
+        if st.button("📖 Go Back", use_container_width=True, key="go_back_button"):
+            st.session_state.current_stage = go_back_stage[0]
+            st.session_state.revisit_message_shown = False
+            st.rerun()
+    
+    with col_back_2:
+        if current_progress_stage and current_progress_stage != st.session_state.current_stage:
+            if st.button("↩️ Current", use_container_width=True, key="back_to_current_button"):
+                st.session_state.current_stage = current_progress_stage
                 st.session_state.revisit_message_shown = False
                 st.rerun()
-        
-        # Find the actual current progress stage (the one before "completed")
-        current_progress_stage = None
-        for i in range(len(stages) - 1, -1, -1):
-            if stages[i][0] != "completed" and _is_stage_complete(stages[i][0], _early_facts):
-                current_progress_stage = stages[i][0]
-                break
-        if current_progress_stage is None:
-            # If no stage is complete, find the first incomplete stage
-            for stage_id, _, _ in stages:
-                if stage_id != "completed" and not _is_stage_complete(stage_id, _early_facts):
-                    current_progress_stage = stage_id
-                    break
-        
-        with col_back_2:
-            if current_progress_stage and current_progress_stage != st.session_state.current_stage:
-                if st.button("↩️ Current", use_container_width=True, key="back_to_current_button"):
-                    st.session_state.current_stage = current_progress_stage
-                    st.session_state.revisit_message_shown = False
-                    st.rerun()
-    st.sidebar.markdown("---")
+
+# Show "Continue to Progress" button when user is viewing a revisited stage
+_is_revisiting = current_stage_index > 0 and st.session_state.current_stage in [s[0] for s in stages[:current_stage_index] if s[0] != "completed"]
+if _is_revisiting:
+    # The actual progress stage is the one at current_stage_index
+    _progress_stage = stages[current_stage_index][0] if current_stage_index < len(stages) else None
+    
+    if _progress_stage and _progress_stage != st.session_state.current_stage:
+        if st.sidebar.button("⏭️ Continue to Progress", use_container_width=True, key="continue_progress_button"):
+            st.session_state.current_stage = _progress_stage
+            st.session_state.revisit_message_shown = False
+            st.rerun()
+else:
+    st.sidebar.caption("Complete a stage to revisit it")
 
 # Admin-only Developers info section
 _dev_is_admin = _is_user_admin(st.session_state.user_email)
 if _dev_is_admin:
+    st.sidebar.markdown("---")
     with st.sidebar.expander("Developers info", expanded=False):
         st.markdown("**Session:**")
         st.text_input(
@@ -1436,20 +1426,14 @@ if _dev_is_admin:
         st.session_state.current_stage = new_stage
         st.rerun()
 
+st.sidebar.markdown("")
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 🔧 Settings")
 st.session_state.show_sources = st.sidebar.checkbox("Show sources", value=st.session_state.show_sources)
 
+st.sidebar.markdown("")
 st.sidebar.markdown("---")
-st.sidebar.markdown("### 📊 RAG Status")
-try:
-    doc_count = rag.vector_store.get_collection_count()
-    st.sidebar.success(f"✅ {doc_count} documents indexed")
-except:
-    st.sidebar.warning("⚠️ RAG system initializing...")
-
-st.sidebar.markdown("---")
-st.sidebar.markdown("### 📄 Onboarding Summary")
+st.sidebar.markdown("### 📥 Onboarding Summary")
 _sidebar_facts = _get_onboarding_facts(st.session_state.user_id)
 _completed_stages_for_download = [
     (stage_id, stage_name)
@@ -1759,6 +1743,35 @@ if user_input:
     
     st.rerun()
 
+# Check if user just revisited a stage and show agent message
+# A stage is being revisited if it's completed but not the current progress stage
+_completed_stage_ids = [s[0] for s in stages if s[0] != "completed" and _is_stage_complete(s[0], _early_facts)]
+_is_revisiting_stage = st.session_state.current_stage in _completed_stage_ids and st.session_state.current_stage != _derive_current_stage_from_facts(_early_facts)
+if _is_revisiting_stage and not st.session_state.revisit_message_shown and len(st.session_state.messages) == 0:
+    with st.spinner("🤖 Your onboarding assistant is ready..."):
+        try:
+            # Get the stage name for personalized message
+            _revisit_stage_name = next((s[1] for s in stages if s[0] == st.session_state.current_stage), "this stage")
+            result = run_agent(
+                user_input=f"Welcome back to {_revisit_stage_name}! I'm revisiting this stage to check if I missed anything or if we can move on.",
+                user_id=st.session_state.user_id,
+                session_id=st.session_state.session_id,
+                current_stage=st.session_state.current_stage
+            )
+            
+            st.session_state.messages.append({
+                "role": "assistant",
+                "content": result["response"],
+                "stage": st.session_state.current_stage,
+                "sources": result.get("sources", []),
+                "timestamp": datetime.now().isoformat()
+            })
+            st.session_state.revisit_message_shown = True
+            st.rerun()
+        except Exception as e:
+            logger.error(f"Error generating revisit message: {e}")
+            st.session_state.revisit_message_shown = True
+
 if len(st.session_state.messages) == 0:
     if not has_existing_progress:
         if not st.session_state.onboarding_started:
@@ -1858,18 +1871,3 @@ if len(st.session_state.messages) == 0:
                     st.session_state.unlocked_stages.add(_resume_next_stage_id)
                 st.rerun()
 
-st.markdown("---")
-col1, col2, col3, col4 = st.columns(4)
-with col1:
-    st.metric("💬 Messages", len(st.session_state.messages))
-with col2:
-    stage_progress = (current_stage_index + 1) / len(stages) * 100
-    st.metric("📊 Progress", f"{stage_progress:.0f}%")
-with col3:
-    try:
-        doc_count = rag.vector_store.get_collection_count()
-        st.metric("📚 Knowledge Base", f"{doc_count} docs")
-    except:
-        st.metric("📚 Knowledge Base", "Loading...")
-with col4:
-    st.metric("🤖 AI Mode", "RAG + Agent")
