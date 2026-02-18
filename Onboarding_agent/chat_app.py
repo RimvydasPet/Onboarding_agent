@@ -10,6 +10,7 @@ from backend.models.schemas import OnboardingStage
 from backend.config import settings
 from backend.memory.long_term import LongTermMemory
 from backend.agent.nodes import AgentNodes
+from backend.auth.oauth import GoogleOAuthHandler
 import logging
 from sqlalchemy.orm.attributes import flag_modified
 from io import BytesIO
@@ -20,6 +21,7 @@ import json
 import urllib.request
 import urllib.error
 import time
+from urllib.parse import parse_qs, urlparse
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -97,6 +99,97 @@ st.markdown("""
     }
 </style>
 """, unsafe_allow_html=True)
+
+
+def _show_login_page():
+    """Display Gmail OAuth login page."""
+    st.markdown(
+        '<div class="main-header">🎯 Onboarding Assistant</div>',
+        unsafe_allow_html=True,
+    )
+    
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.markdown(
+            """
+            <div style="text-align: center; padding: 2rem;">
+                <h2>Welcome to TechVenture Solutions</h2>
+                <p style="font-size: 1.1rem; color: #666; margin: 1.5rem 0;">
+                    Sign in with your Google account to get started with your onboarding journey.
+                </p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        
+        # Check if OAuth credentials are configured
+        if not settings.GOOGLE_OAUTH_CLIENT_ID or not settings.GOOGLE_OAUTH_CLIENT_SECRET:
+            st.error(
+                "⚠️ **Google OAuth is not configured.** "
+                "Please add `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET` to your `.env` file."
+            )
+            st.info(
+                "**Setup Instructions:**\n"
+                "1. Go to [Google Cloud Console](https://console.cloud.google.com/)\n"
+                "2. Create a new OAuth 2.0 Client ID (Web application)\n"
+                "3. Add `http://localhost:8501` to Authorized redirect URIs\n"
+                "4. Copy the Client ID and Client Secret to your `.env` file"
+            )
+            return
+        
+        oauth_handler = GoogleOAuthHandler()
+        state = str(uuid.uuid4())
+        auth_url = oauth_handler.get_auth_url(state)
+        
+        st.markdown(
+            f"""
+            <div style="text-align: center; margin-top: 2rem;">
+                <a href="{auth_url}" target="_self" style="
+                    display: inline-block;
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    color: white;
+                    padding: 0.75rem 2rem;
+                    border-radius: 8px;
+                    text-decoration: none;
+                    font-weight: bold;
+                    font-size: 1.1rem;
+                    transition: transform 0.2s;
+                ">
+                    🔐 Sign in with Google
+                </a>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+
+def _handle_oauth_callback():
+    """Handle OAuth callback and authenticate user."""
+    query_params = st.query_params
+    code = query_params.get("code")
+    
+    if not code:
+        return False
+    
+    oauth_handler = GoogleOAuthHandler()
+    user_info = oauth_handler.authenticate_user(code)
+    
+    if not user_info:
+        st.error("Failed to authenticate with Google. Please try again.")
+        return False
+    
+    # Store user information in session state
+    st.session_state.user_email = user_info.get("email", "")
+    st.session_state.user_name = user_info.get("name", "")
+    st.session_state.user_picture = user_info.get("picture", "")
+    st.session_state.is_authenticated = True
+    st.session_state.access_token = user_info.get("access_token")
+    
+    # Clear query params
+    st.query_params.clear()
+    st.rerun()
+    return True
+
 
 @st.cache_resource
 def initialize_system():
@@ -184,6 +277,44 @@ if "last_stage" not in st.session_state:
 
 if "revisit_message_shown" not in st.session_state:
     st.session_state.revisit_message_shown = False
+
+if "user_email" not in st.session_state:
+    st.session_state.user_email = ""
+
+if "is_authenticated" not in st.session_state:
+    st.session_state.is_authenticated = False
+
+if "user_name" not in st.session_state:
+    st.session_state.user_name = ""
+
+if "user_picture" not in st.session_state:
+    st.session_state.user_picture = ""
+
+
+# Handle OAuth callback
+_handle_oauth_callback()
+
+# Check authentication
+if not st.session_state.is_authenticated:
+    _show_login_page()
+    st.stop()
+
+# Add logout button in sidebar
+with st.sidebar:
+    st.markdown("---")
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        st.markdown(f"👤 **{st.session_state.user_name}**")
+        st.caption(st.session_state.user_email)
+    with col2:
+        if st.button("🚪", help="Logout", key="logout_btn"):
+            st.session_state.is_authenticated = False
+            st.session_state.user_email = ""
+            st.session_state.user_name = ""
+            st.session_state.user_picture = ""
+            st.session_state.access_token = None
+            st.rerun()
+    st.markdown("---")
 
 
 ROLE_STAGE_FIELDS = {
@@ -547,6 +678,128 @@ def _save_facts_to_profile(user_id: int, new_facts: dict) -> None:
     flag_modified(profile, "progress")
     db.commit()
 
+
+def _is_user_admin(email: str) -> bool:
+    """Check if user email is in admin list."""
+    return settings.is_admin_email(email)
+
+
+def _extract_document_links_from_facts(facts: dict) -> dict:
+    """Extract all document/internal rule links mentioned in onboarding answers."""
+    import re
+    links_by_stage = {}
+    
+    for key, value in facts.items():
+        if not isinstance(value, str):
+            continue
+        
+        stage = key.split('.')[0] if '.' in key else 'general'
+        
+        urls = re.findall(r'https?://[^\s\)]+', str(value))
+        doc_refs = re.findall(r'(?:document|rule|policy|procedure|guideline|handbook)[\s:]+([^\n,\.]+)', str(value), re.IGNORECASE)
+        
+        if urls or doc_refs:
+            if stage not in links_by_stage:
+                links_by_stage[stage] = {'urls': [], 'docs': []}
+            links_by_stage[stage]['urls'].extend(urls)
+            links_by_stage[stage]['docs'].extend([d.strip() for d in doc_refs])
+    
+    return links_by_stage
+
+
+def _generate_user_onboarding_pdf(user_id: int, session_id: str, facts: dict) -> bytes:
+    """Generate a user-friendly PDF with document links extracted from answers."""
+    from reportlab.lib import colors
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+    from reportlab.lib.units import inch
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT
+    
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter, topMargin=0.5*inch, bottomMargin=0.5*inch)
+    story = []
+    styles = getSampleStyleSheet()
+    
+    title_style = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Heading1'],
+        fontSize=24,
+        textColor=colors.HexColor('#667eea'),
+        spaceAfter=12,
+        alignment=TA_CENTER,
+        fontName='Helvetica-Bold'
+    )
+    
+    subtitle_style = ParagraphStyle(
+        'CustomSubtitle',
+        parent=styles['Normal'],
+        fontSize=12,
+        textColor=colors.HexColor('#666666'),
+        spaceAfter=20,
+        alignment=TA_CENTER
+    )
+    
+    section_style = ParagraphStyle(
+        'SectionStyle',
+        parent=styles['Heading2'],
+        fontSize=14,
+        textColor=colors.HexColor('#667eea'),
+        spaceAfter=10,
+        spaceBefore=15,
+        fontName='Helvetica-Bold'
+    )
+    
+    body_style = ParagraphStyle(
+        'BodyStyle',
+        parent=styles['Normal'],
+        fontSize=11,
+        spaceAfter=8,
+        leftIndent=20
+    )
+    
+    story.append(Paragraph("🎯 Your Onboarding Summary", title_style))
+    
+    user_name = facts.get('welcome.name', 'New Team Member')
+    user_role = facts.get('welcome.role', 'N/A')
+    
+    story.append(Paragraph(f"Welcome, {user_name}!", subtitle_style))
+    story.append(Paragraph(f"Role: {user_role}", body_style))
+    story.append(Paragraph(f"Generated: {datetime.now().strftime('%B %d, %Y')}", body_style))
+    story.append(Spacer(1, 0.3*inch))
+    
+    links_by_stage = _extract_document_links_from_facts(facts)
+    
+    if links_by_stage:
+        story.append(Paragraph("📚 Important Documents & Resources", section_style))
+        
+        for stage, links_data in sorted(links_by_stage.items()):
+            if links_data['urls'] or links_data['docs']:
+                stage_title = {
+                    'welcome': 'Welcome & Profile',
+                    'department_info': 'Department Information',
+                    'key_responsibilities': 'Key Responsibilities',
+                    'tools_systems': 'Tools & Systems',
+                    'training_needs': 'Training Needs'
+                }.get(stage, stage.replace('_', ' ').title())
+                
+                story.append(Paragraph(f"<b>{stage_title}</b>", body_style))
+                
+                for url in set(links_data['urls']):
+                    story.append(Paragraph(f'<link href="{url}" color="blue"><u>{url}</u></link>', body_style))
+                
+                for doc in set(links_data['docs']):
+                    story.append(Paragraph(f"• {doc.strip()}", body_style))
+                
+                story.append(Spacer(1, 0.15*inch))
+    
+    story.append(Spacer(1, 0.3*inch))
+    footer_text = "<i>This is your personalized onboarding summary with links to resources mentioned during your onboarding process.</i>"
+    story.append(Paragraph(footer_text, subtitle_style))
+    
+    doc.build(story)
+    buffer.seek(0)
+    return buffer.read()
+
 rag = initialize_system()
 
 st.sidebar.title("🎯 Onboarding Progress")
@@ -590,6 +843,9 @@ if _onboarding_complete:
     # Force stage to "completed" so the agent knows we're in post-onboarding mode
     st.session_state.current_stage = "completed"
 
+    # Determine if current user is admin
+    _is_admin = _is_user_admin(st.session_state.user_email)
+
     # --- Sidebar for Document Search mode ---
     st.sidebar.title("📖 Internal Rules Search")
     st.sidebar.markdown("✅ **Onboarding complete!**")
@@ -603,14 +859,17 @@ if _onboarding_complete:
         "I'll search our internal documents for you."
     )
     st.sidebar.markdown("---")
-    st.sidebar.markdown("### 📊 RAG Status")
-    try:
-        _ds_doc_count = rag.vector_store.get_collection_count()
-        st.sidebar.success(f"✅ {_ds_doc_count} documents indexed")
-    except Exception:
-        st.sidebar.warning("⚠️ RAG system initializing...")
+    
+    # Admin-only RAG Status
+    if _is_admin:
+        st.sidebar.markdown("### 📊 RAG Status")
+        try:
+            _ds_doc_count = rag.vector_store.get_collection_count()
+            st.sidebar.success(f"✅ {_ds_doc_count} documents indexed")
+        except Exception:
+            st.sidebar.warning("⚠️ RAG system initializing...")
+        st.sidebar.markdown("---")
 
-    st.sidebar.markdown("---")
     st.sidebar.markdown("### 📄 Onboarding Summary")
     _ds_completed_stages = [
         (sid, sname)
@@ -618,19 +877,34 @@ if _onboarding_complete:
         if sid != "completed" and _is_stage_complete(sid, _early_facts)
     ]
     if _ds_completed_stages:
-        _ds_pdf = _generate_comprehensive_onboarding_pdf(
-            user_id=st.session_state.user_id,
-            session_id=st.session_state.session_id,
-            facts=_early_facts,
-        )
-        st.sidebar.download_button(
-            label="📥 Download Complete Summary",
-            data=_ds_pdf,
-            file_name=f"onboarding_summary_{st.session_state.session_id[:8]}.pdf",
-            mime="application/pdf",
-            key="ds_comprehensive_dl",
-            use_container_width=True,
-        )
+        if _is_admin:
+            _ds_pdf = _generate_comprehensive_onboarding_pdf(
+                user_id=st.session_state.user_id,
+                session_id=st.session_state.session_id,
+                facts=_early_facts,
+            )
+            st.sidebar.download_button(
+                label="📥 Download Complete Summary",
+                data=_ds_pdf,
+                file_name=f"onboarding_summary_{st.session_state.session_id[:8]}.pdf",
+                mime="application/pdf",
+                key="ds_comprehensive_dl",
+                use_container_width=True,
+            )
+        else:
+            _user_pdf = _generate_user_onboarding_pdf(
+                user_id=st.session_state.user_id,
+                session_id=st.session_state.session_id,
+                facts=_early_facts,
+            )
+            st.sidebar.download_button(
+                label="📥 Download Your Resources",
+                data=_user_pdf,
+                file_name=f"onboarding_resources_{st.session_state.session_id[:8]}.pdf",
+                mime="application/pdf",
+                key="user_resources_dl",
+                use_container_width=True,
+            )
 
     if st.sidebar.button("🔄 Restart Onboarding", use_container_width=True, key="ds_restart"):
         from backend.memory.short_term import ShortTermMemory as _STM
@@ -674,6 +948,35 @@ if _onboarding_complete:
         )
 
     st.markdown("---")
+
+    # Display extracted document links for non-admin users
+    if not _is_admin:
+        _user_links = _extract_document_links_from_facts(_early_facts)
+        if _user_links:
+            st.markdown("### 📚 Your Onboarding Resources")
+            st.markdown("Here are all the documents and resources mentioned during your onboarding:")
+            
+            for stage, links_data in sorted(_user_links.items()):
+                if links_data['urls'] or links_data['docs']:
+                    stage_title = {
+                        'welcome': '👋 Welcome & Profile',
+                        'department_info': '🏢 Department Information',
+                        'key_responsibilities': '🎯 Key Responsibilities',
+                        'tools_systems': '🛠️ Tools & Systems',
+                        'training_needs': '📚 Training Needs'
+                    }.get(stage, stage.replace('_', ' ').title())
+                    
+                    with st.expander(stage_title, expanded=True):
+                        if links_data['urls']:
+                            st.markdown("**Links:**")
+                            for url in set(links_data['urls']):
+                                st.markdown(f"- [🔗 {url}]({url})")
+                        
+                        if links_data['docs']:
+                            st.markdown("**Documents:**")
+                            for doc in set(links_data['docs']):
+                                st.markdown(f"- {doc.strip()}")
+            st.markdown("---")
 
     # Initialise document-search message history (separate from onboarding messages)
     if "ds_messages" not in st.session_state:
@@ -815,208 +1118,211 @@ if current_stage_index > 0:
                     st.rerun()
     st.sidebar.markdown("---")
 
-with st.sidebar.expander("Developers info", expanded=False):
-    st.markdown("**Session:**")
-    st.text_input(
-        "Session ID",
-        value=st.session_state.session_id,
-        key="dev_session_id",
-        label_visibility="collapsed",
-        disabled=True,
-    )
-
-    try:
-        _dev_doc_count = rag.vector_store.get_collection_count()
-        st.caption(f"✅ {_dev_doc_count} documents indexed")
-    except Exception:
-        st.caption("⚠️ RAG system initializing...")
-
-    st.caption("🤖 AI Mode: RAG + Agent")
-    st.markdown(f"**Messages:** {len(st.session_state.messages)}")
-
-    st.markdown("---")
-    st.markdown("**Web search (Tavily)**")
-    _provider = str(getattr(settings, "WEB_SEARCH_PROVIDER", "tavily") or "tavily").strip().lower()
-    _key_len = len(str(getattr(settings, "TAVILY_API_KEY", "") or "").strip())
-    st.caption(f"Provider: `{_provider}`")
-    st.caption(f"TAVILY_API_KEY configured: `{'yes' if _key_len > 0 else 'no'}`")
-
-    col_tav_a, col_tav_b = st.columns([1, 1])
-    with col_tav_a:
-        if st.button("Check Tavily", use_container_width=True, key="dev_check_tavily"):
-            _tavily_connectivity_check.clear()
-    with col_tav_b:
-        st.caption("(cached 10 min)")
-
-    _tav_status = _tavily_connectivity_check(_api_key_len=_key_len)
-    if not _tav_status.get("configured"):
-        st.warning("Tavily not configured")
-    elif _tav_status.get("ok"):
-        st.success(f"Tavily OK ({_tav_status.get('latency_ms', '?')} ms)")
-    else:
-        err = _tav_status.get("error") or "unknown error"
-        st.error(f"Tavily error: {err}")
-
-    st.markdown("---")
-    st.markdown("**Onboarding generation debug**")
-    try:
-        _facts = _get_onboarding_facts(st.session_state.user_id) or {}
-        _role = str(_facts.get("welcome.role") or "").strip()
-        st.caption(f"Current stage: `{st.session_state.current_stage}`")
-        st.caption(f"Stored role (welcome.role): `{_role or '(empty)'}`")
-
-        _agent_tmp = AgentNodes()
-        _role_cat_value = _agent_tmp._role_category(_role) if _role else "(none)"
-        st.caption(f"Role category: `{_role_cat_value}`")
-
-        db = next(get_db())
-        ltm = LongTermMemory(db)
-
-        stage_rows = []
-        for _stage_key in ["department_info", "key_responsibilities", "tools_systems", "training_needs"]:
-            bank_key = AgentNodes._generated_bank_cache_key(_role, _stage_key)
-            research_key = AgentNodes._role_research_cache_key(_role, _stage_key)
-            cached_bank = ltm.get_memory(st.session_state.user_id, "onboarding_generated", bank_key)
-            cached_research = ltm.get_memory(st.session_state.user_id, "onboarding_generated", research_key)
-            stage_rows.append(
-                {
-                    "stage": _stage_key,
-                    "bank_questions": len(cached_bank) if isinstance(cached_bank, list) else 0,
-                    "research_cached": bool(isinstance(cached_research, dict) and cached_research),
-                }
-            )
-
-        st.dataframe(stage_rows, use_container_width=True, hide_index=True)
-        st.caption("If stage is `welcome`, generated questions are not created yet. They generate when you enter the next stages.")
-    except Exception as e:
-        st.caption(f"Debug unavailable: {type(e).__name__}")
-
-    st.markdown("---")
-    st.markdown("**Upload Documents to RAG**")
-    _upload_category = st.text_input(
-        "Upload category",
-        value="uploaded",
-        key="dev_upload_category",
-        help="Optional metadata category to help retrieval/reranking.",
-    )
-    _upload_stage = st.selectbox(
-        "Upload stage (optional)",
-        options=["", "welcome", "department_info", "key_responsibilities", "tools_systems", "training_needs"],
-        key="dev_upload_stage",
-    )
-    _uploaded_files = st.file_uploader(
-        "Upload .md, .pdf, or .txt files",
-        type=["md", "markdown", "pdf", "txt"],
-        accept_multiple_files=True,
-        key="dev_upload_files",
-        label_visibility="collapsed",
-    )
-    if st.button("📤 Ingest uploaded files", use_container_width=True, key="dev_ingest_files"):
-        if not _uploaded_files:
-            st.warning("No files selected")
-        else:
-            try:
-                from langchain_core.documents import Document
-            except Exception:
-                Document = None
-
-            upload_root = (Path(__file__).resolve().parent.parent / "Internal rules")
-            upload_root.mkdir(parents=True, exist_ok=True)
-
-            docs_to_add = []
-            saved = 0
-            for f in _uploaded_files:
-                upload_id = str(uuid.uuid4())
-                file_name = str(getattr(f, "name", "uploaded.md"))
-                try:
-                    raw = f.getvalue()
-                except Exception:
-                    raw = f.read()
-
-                if file_name.lower().endswith(".pdf"):
-                    try:
-                        from PyPDF2 import PdfReader
-                        reader = PdfReader(BytesIO(raw))
-                        text = "\n".join(
-                            page.extract_text() or "" for page in reader.pages
-                        )
-                    except Exception as pdf_err:
-                        st.warning(f"Could not extract text from {file_name}: {pdf_err}")
-                        continue
-                else:
-                    text = raw.decode("utf-8", errors="replace")
-
-                safe_name = Path(file_name).name
-                # If a file with the same name already exists, add the upload_id to avoid overwriting
-                if (upload_root / safe_name).exists():
-                    stem = Path(file_name).stem
-                    suffix = Path(file_name).suffix
-                    safe_name = f"{stem}_{upload_id[:8]}{suffix}"
-                (upload_root / safe_name).write_bytes(raw)
-                saved += 1
-
-                meta = {
-                    "origin": "upload",
-                    "upload_id": upload_id,
-                    "file_name": Path(file_name).name,
-                    "category": _upload_category or "uploaded",
-                }
-                if _upload_stage:
-                    meta["stage"] = _upload_stage
-
-                if Document is not None:
-                    docs_to_add.append(Document(page_content=text, metadata=meta))
-                else:
-                    docs_to_add.append(rag.document_processor.create_document(content=text, metadata=meta, source=Path(file_name).name))
-
-            with st.spinner("Indexing uploaded documents..."):
-                rag.initialize_knowledge_base(docs_to_add)
-
-            st.success(f"Ingested {len(docs_to_add)} file(s) and saved {saved} raw file(s) to {upload_root}")
-            st.rerun()
-
-    st.markdown("---")
-    st.markdown("**Manage uploaded files**")
-    _known_uploads = []
-    try:
-        _known_uploads = rag.vector_store.list_uploaded_files()
-    except Exception:
-        _known_uploads = []
-
-    if not _known_uploads:
-        st.caption("No uploaded files indexed yet.")
-    else:
-        _upload_label_to_id = {
-            f"{u.get('file_name','unknown')} ({u.get('chunks',0)} chunks)": u.get("upload_id")
-            for u in _known_uploads
-        }
-        _selected_label = st.selectbox(
-            "Select uploaded file",
-            options=list(_upload_label_to_id.keys()),
-            key="dev_selected_upload",
+# Admin-only Developers info section
+_dev_is_admin = _is_user_admin(st.session_state.user_email)
+if _dev_is_admin:
+    with st.sidebar.expander("Developers info", expanded=False):
+        st.markdown("**Session:**")
+        st.text_input(
+            "Session ID",
+            value=st.session_state.session_id,
+            key="dev_session_id",
+            label_visibility="collapsed",
+            disabled=True,
         )
-        _selected_upload_id = _upload_label_to_id.get(_selected_label)
 
-        col_del_a, col_del_b = st.columns([1, 1])
-        with col_del_a:
-            if st.button("🗑️ Delete from index", use_container_width=True, key="dev_delete_upload"):
-                removed = rag.vector_store.delete_by_upload_id(str(_selected_upload_id or ""))
-                st.success(f"Removed {removed} chunk(s) from the vector index")
-                st.rerun()
+        try:
+            _dev_doc_count = rag.vector_store.get_collection_count()
+            st.caption(f"✅ {_dev_doc_count} documents indexed")
+        except Exception:
+            st.caption("⚠️ RAG system initializing...")
 
-        with col_del_b:
-            if st.button("🧹 Delete raw file(s)", use_container_width=True, key="dev_delete_raw"):
+        st.caption("🤖 AI Mode: RAG + Agent")
+        st.markdown(f"**Messages:** {len(st.session_state.messages)}")
+
+        st.markdown("---")
+        st.markdown("**Web search (Tavily)**")
+        _provider = str(getattr(settings, "WEB_SEARCH_PROVIDER", "tavily") or "tavily").strip().lower()
+        _key_len = len(str(getattr(settings, "TAVILY_API_KEY", "") or "").strip())
+        st.caption(f"Provider: `{_provider}`")
+        st.caption(f"TAVILY_API_KEY configured: `{'yes' if _key_len > 0 else 'no'}`")
+
+        col_tav_a, col_tav_b = st.columns([1, 1])
+        with col_tav_a:
+            if st.button("Check Tavily", use_container_width=True, key="dev_check_tavily"):
+                _tavily_connectivity_check.clear()
+        with col_tav_b:
+            st.caption("(cached 10 min)")
+
+        _tav_status = _tavily_connectivity_check(_api_key_len=_key_len)
+        if not _tav_status.get("configured"):
+            st.warning("Tavily not configured")
+        elif _tav_status.get("ok"):
+            st.success(f"Tavily OK ({_tav_status.get('latency_ms', '?')} ms)")
+        else:
+            err = _tav_status.get("error") or "unknown error"
+            st.error(f"Tavily error: {err}")
+
+        st.markdown("---")
+        st.markdown("**Onboarding generation debug**")
+        try:
+            _facts = _get_onboarding_facts(st.session_state.user_id) or {}
+            _role = str(_facts.get("welcome.role") or "").strip()
+            st.caption(f"Current stage: `{st.session_state.current_stage}`")
+            st.caption(f"Stored role (welcome.role): `{_role or '(empty)'}`")
+
+            _agent_tmp = AgentNodes()
+            _role_cat_value = _agent_tmp._role_category(_role) if _role else "(none)"
+            st.caption(f"Role category: `{_role_cat_value}`")
+
+            db = next(get_db())
+            ltm = LongTermMemory(db)
+
+            stage_rows = []
+            for _stage_key in ["department_info", "key_responsibilities", "tools_systems", "training_needs"]:
+                bank_key = AgentNodes._generated_bank_cache_key(_role, _stage_key)
+                research_key = AgentNodes._role_research_cache_key(_role, _stage_key)
+                cached_bank = ltm.get_memory(st.session_state.user_id, "onboarding_generated", bank_key)
+                cached_research = ltm.get_memory(st.session_state.user_id, "onboarding_generated", research_key)
+                stage_rows.append(
+                    {
+                        "stage": _stage_key,
+                        "bank_questions": len(cached_bank) if isinstance(cached_bank, list) else 0,
+                        "research_cached": bool(isinstance(cached_research, dict) and cached_research),
+                    }
+                )
+
+            st.dataframe(stage_rows, use_container_width=True, hide_index=True)
+            st.caption("If stage is `welcome`, generated questions are not created yet. They generate when you enter the next stages.")
+        except Exception as e:
+            st.caption(f"Debug unavailable: {type(e).__name__}")
+
+        st.markdown("---")
+        st.markdown("**Upload Documents to RAG**")
+        _upload_category = st.text_input(
+            "Upload category",
+            value="uploaded",
+            key="dev_upload_category",
+            help="Optional metadata category to help retrieval/reranking.",
+        )
+        _upload_stage = st.selectbox(
+            "Upload stage (optional)",
+            options=["", "welcome", "department_info", "key_responsibilities", "tools_systems", "training_needs"],
+            key="dev_upload_stage",
+        )
+        _uploaded_files = st.file_uploader(
+            "Upload .md, .pdf, or .txt files",
+            type=["md", "markdown", "pdf", "txt"],
+            accept_multiple_files=True,
+            key="dev_upload_files",
+            label_visibility="collapsed",
+        )
+        if st.button("📤 Ingest uploaded files", use_container_width=True, key="dev_ingest_files"):
+            if not _uploaded_files:
+                st.warning("No files selected")
+            else:
+                try:
+                    from langchain_core.documents import Document
+                except Exception:
+                    Document = None
+
                 upload_root = (Path(__file__).resolve().parent.parent / "Internal rules")
-                deleted = 0
-                if upload_root.exists() and _selected_upload_id:
-                    for p in upload_root.glob(f"{_selected_upload_id}_*"):
+                upload_root.mkdir(parents=True, exist_ok=True)
+
+                docs_to_add = []
+                saved = 0
+                for f in _uploaded_files:
+                    upload_id = str(uuid.uuid4())
+                    file_name = str(getattr(f, "name", "uploaded.md"))
+                    try:
+                        raw = f.getvalue()
+                    except Exception:
+                        raw = f.read()
+
+                    if file_name.lower().endswith(".pdf"):
                         try:
-                            p.unlink()
-                            deleted += 1
-                        except Exception as e:
-                            logger.warning(f"Could not delete {p}: {e}")
-                st.success(f"Deleted {deleted} raw file(s)")
+                            from PyPDF2 import PdfReader
+                            reader = PdfReader(BytesIO(raw))
+                            text = "\n".join(
+                                page.extract_text() or "" for page in reader.pages
+                            )
+                        except Exception as pdf_err:
+                            st.warning(f"Could not extract text from {file_name}: {pdf_err}")
+                            continue
+                    else:
+                        text = raw.decode("utf-8", errors="replace")
+
+                    safe_name = Path(file_name).name
+                    # If a file with the same name already exists, add the upload_id to avoid overwriting
+                    if (upload_root / safe_name).exists():
+                        stem = Path(file_name).stem
+                        suffix = Path(file_name).suffix
+                        safe_name = f"{stem}_{upload_id[:8]}{suffix}"
+                    (upload_root / safe_name).write_bytes(raw)
+                    saved += 1
+
+                    meta = {
+                        "origin": "upload",
+                        "upload_id": upload_id,
+                        "file_name": Path(file_name).name,
+                        "category": _upload_category or "uploaded",
+                    }
+                    if _upload_stage:
+                        meta["stage"] = _upload_stage
+
+                    if Document is not None:
+                        docs_to_add.append(Document(page_content=text, metadata=meta))
+                    else:
+                        docs_to_add.append(rag.document_processor.create_document(content=text, metadata=meta, source=Path(file_name).name))
+
+                with st.spinner("Indexing uploaded documents..."):
+                    rag.initialize_knowledge_base(docs_to_add)
+
+                st.success(f"Ingested {len(docs_to_add)} file(s) and saved {saved} raw file(s) to {upload_root}")
                 st.rerun()
+
+        st.markdown("---")
+        st.markdown("**Manage uploaded files**")
+        _known_uploads = []
+        try:
+            _known_uploads = rag.vector_store.list_uploaded_files()
+        except Exception:
+            _known_uploads = []
+
+        if not _known_uploads:
+            st.caption("No uploaded files indexed yet.")
+        else:
+            _upload_label_to_id = {
+                f"{u.get('file_name','unknown')} ({u.get('chunks',0)} chunks)": u.get("upload_id")
+                for u in _known_uploads
+            }
+            _selected_label = st.selectbox(
+                "Select uploaded file",
+                options=list(_upload_label_to_id.keys()),
+                key="dev_selected_upload",
+            )
+            _selected_upload_id = _upload_label_to_id.get(_selected_label)
+
+            col_del_a, col_del_b = st.columns([1, 1])
+            with col_del_a:
+                if st.button("🗑️ Delete from index", use_container_width=True, key="dev_delete_upload"):
+                    removed = rag.vector_store.delete_by_upload_id(str(_selected_upload_id or ""))
+                    st.success(f"Removed {removed} chunk(s) from the vector index")
+                    st.rerun()
+
+            with col_del_b:
+                if st.button("🧹 Delete raw file(s)", use_container_width=True, key="dev_delete_raw"):
+                    upload_root = (Path(__file__).resolve().parent.parent / "Internal rules")
+                    deleted = 0
+                    if upload_root.exists() and _selected_upload_id:
+                        for p in upload_root.glob(f"{_selected_upload_id}_*"):
+                            try:
+                                p.unlink()
+                                deleted += 1
+                            except Exception as e:
+                                logger.warning(f"Could not delete {p}: {e}")
+                    st.success(f"Deleted {deleted} raw file(s)")
+                    st.rerun()
 
     if st.button("🔄 New Session", use_container_width=True):
         from backend.database.connection import get_db

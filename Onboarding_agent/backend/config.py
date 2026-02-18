@@ -34,9 +34,25 @@ class Settings(BaseSettings):
     CHROMA_PERSIST_DIRECTORY: str = "./chroma_db"
     EMBEDDING_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"
     
+    ADMIN_EMAILS: str = ""
+    
+    GOOGLE_OAUTH_CLIENT_ID: str = ""
+    GOOGLE_OAUTH_CLIENT_SECRET: str = ""
+    GOOGLE_OAUTH_REDIRECT_URI: str = "http://localhost:8501"
+    
     @property
     def allowed_origins_list(self) -> List[str]:
         return [origin.strip() for origin in self.ALLOWED_ORIGINS.split(",")]
+    
+    @property
+    def admin_emails_list(self) -> List[str]:
+        admin_emails = str(self.ADMIN_EMAILS or "").strip()
+        if not admin_emails:
+            return []
+        return [email.strip().lower() for email in admin_emails.split(",")]
+    
+    def is_admin_email(self, email: str) -> bool:
+        return email.strip().lower() in self.admin_emails_list
     
     model_config = SettingsConfigDict(
         env_file=str(ENV_FILE),
