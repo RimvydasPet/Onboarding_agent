@@ -16,7 +16,7 @@ def load_internal_rules_documents() -> list[Document]:
         List of Document objects from the Internal rules folder
     """
     documents = []
-    internal_rules_path = Path(__file__).resolve().parent.parent.parent / "Internal rules"
+    internal_rules_path = Path(__file__).resolve().parent.parent.parent.parent / "Internal rules"
     
     if not internal_rules_path.exists():
         logger.warning(f"Internal rules folder not found at {internal_rules_path}")
@@ -51,8 +51,10 @@ def load_internal_rules_documents() -> list[Document]:
                     text = f.read()
             
             if text.strip():
+                # Add filename to content for better searchability
+                enhanced_content = f"Document: {file_name}\n\n{text}"
                 doc = Document(
-                    page_content=text,
+                    page_content=enhanced_content,
                     metadata={
                         "source": file_name,
                         "category": "internal_rules",
@@ -85,27 +87,41 @@ def initialize_rag_system(force_reload: bool = False) -> AgenticRAG:
     
     try:
         current_count = rag.vector_store.get_collection_count()
+        logger.info(f"Current vector store count: {current_count}")
         
+        # Always reload to ensure internal rules are included
         if current_count == 0 or force_reload:
             if force_reload and current_count > 0:
-                logger.info("Force reloading knowledge base...")
-                rag.reset_knowledge_base()
+                logger.info("Force reloading knowledge base - deleting existing collection...")
+                try:
+                    rag.reset_knowledge_base()
+                    logger.info("Collection deleted successfully")
+                except Exception as e:
+                    logger.warning(f"Could not delete collection: {e}")
+                # Recreate RAG instance to get fresh vector store
+                rag = AgenticRAG()
             else:
                 logger.info("Knowledge base is empty, loading documents...")
             
             documents = []
             
             # Load internal rules documents first
+            logger.info("Loading internal rules documents...")
             internal_docs = load_internal_rules_documents()
+            logger.info(f"Loaded {len(internal_docs)} internal rules documents")
             documents.extend(internal_docs)
             
             # Load sample documents
+            logger.info("Loading sample documents...")
             sample_docs = get_sample_documents()
+            logger.info(f"Loaded {len(sample_docs)} sample documents")
             documents.extend(sample_docs)
             
             if documents:
+                logger.info(f"Initializing knowledge base with {len(documents)} total documents...")
                 rag.initialize_knowledge_base(documents)
-                logger.info(f"Loaded {len(documents)} total documents ({len(internal_docs)} internal rules + {len(sample_docs)} sample)")
+                final_count = rag.vector_store.get_collection_count()
+                logger.info(f"Knowledge base initialized with {final_count} chunks ({len(internal_docs)} internal rules + {len(sample_docs)} sample)")
             else:
                 logger.warning("No documents to load")
         else:
@@ -122,6 +138,7 @@ def initialize_rag_system(force_reload: bool = False) -> AgenticRAG:
             documents.extend(sample_docs)
             if documents:
                 rag.initialize_knowledge_base(documents)
+                logger.info(f"Loaded {len(documents)} documents in fallback mode")
         except Exception as e2:
             logger.error(f"Failed to load documents: {e2}")
     

@@ -2,6 +2,7 @@ from langgraph.graph import StateGraph, END
 from backend.agent.state import OnboardingAgentState
 from backend.agent.nodes import AgentNodes
 import logging
+import traceback
 
 logger = logging.getLogger(__name__)
 
@@ -99,6 +100,7 @@ def run_agent(
     
     except Exception as e:
         logger.error(f"Error running agent: {e}")
+        logger.error(f"Full traceback:\n{traceback.format_exc()}")
         return {
             "response": f"I apologize, but I encountered an error: {str(e)}",
             "sources": [],

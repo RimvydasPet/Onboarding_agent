@@ -176,3 +176,29 @@ class VectorStore:
     def get_collection_count(self) -> int:
         """Get the number of documents in the collection."""
         return self.collection.count()
+    
+    def list_all_documents(self) -> List[Dict[str, Any]]:
+        """List all documents in the collection with their metadata."""
+        try:
+            data = self.collection.get(include=["metadatas"])
+            metadatas = data.get("metadatas") or []
+            
+            # Group by source
+            grouped = {}
+            for meta in metadatas:
+                if not isinstance(meta, dict):
+                    continue
+                source = str(meta.get("source", "unknown"))
+                if source not in grouped:
+                    grouped[source] = {
+                        "source": source,
+                        "category": meta.get("category", "unknown"),
+                        "origin": meta.get("origin", "unknown"),
+                        "chunks": 0
+                    }
+                grouped[source]["chunks"] += 1
+            
+            return sorted(grouped.values(), key=lambda x: x.get("source", ""))
+        except Exception as e:
+            logger.error(f"Failed to list documents: {e}")
+            return []

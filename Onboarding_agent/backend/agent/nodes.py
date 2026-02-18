@@ -3,6 +3,7 @@ import json
 import re
 import urllib.request
 import urllib.error
+import traceback
 from datetime import datetime
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -94,6 +95,12 @@ class AgentNodes:
         "For more details, I'd recommend reaching out to {contact}. "
         "They'll be happy to help!\n\n"
         "Do you have any other questions, or shall we **move on**?"
+    )
+
+    _QA_COMPLETED_FALLBACK = (
+        "I wasn't able to find a specific answer in our company documents. "
+        "For more details, I'd recommend reaching out to {contact}. "
+        "They'll be happy to help!"
     )
 
     _QA_DEFAULT_CONTACT = "your **direct manager** or the **HR Department** (hr@techventure.com)"
@@ -785,6 +792,24 @@ Rules:
         
         return state
 
+    def _handle_document_search(
+        self,
+        state: OnboardingAgentState,
+        onboarding_facts: dict,
+    ) -> OnboardingAgentState:
+        """
+        Handle document search queries after onboarding is completed.
+        
+        Args:
+            state: Current agent state
+            onboarding_facts: User's onboarding facts
+            
+        Returns:
+            Updated state with response
+        """
+        logger.info("Handling document search (post-onboarding)")
+        return self._handle_qa_question(state, "completed", onboarding_facts)
+    
     # ------------------------------------------------------------------
     # Q&A helper: answer from RAG docs with a smart fallback
     # ------------------------------------------------------------------
@@ -806,36 +831,81 @@ Rules:
         logger.info(f"Q&A mode – answering question: {user_question[:120]}")
 
         # --- 1. Retrieve from RAG ---
-        MIN_RELEVANCE_SCORE = 0.35
+        MIN_RELEVANCE_SCORE = 0.05
         try:
             rag_result = self.rag.retrieve(
                 query=user_question,
                 current_stage=current_stage,
-                top_k=5,
-                use_reranking=True,
+                top_k=20,
+                use_reranking=False,
             )
             docs = rag_result.get("documents") or []
-            # Keep only docs above the relevance threshold
-            relevant_docs = [
+            logger.info(f"Retrieved {len(docs)} documents from RAG")
+            
+            # Prioritize internal rules documents
+            internal_rules_docs = [
                 d for d in docs
+                if d.metadata.get("origin") == "internal_rules"
+            ]
+            other_docs = [
+                d for d in docs
+                if d.metadata.get("origin") != "internal_rules"
+            ]
+            
+            logger.info(f"Found {len(internal_rules_docs)} internal rules docs and {len(other_docs)} other docs")
+            
+            # Keep only docs above the relevance threshold, prioritizing internal rules
+            relevant_docs = [
+                d for d in internal_rules_docs
                 if d.metadata.get("score", 0.0) >= MIN_RELEVANCE_SCORE
             ]
+            logger.info(f"Found {len(relevant_docs)} internal rules docs above threshold {MIN_RELEVANCE_SCORE}")
+            
+            # If no internal rules docs found, try keyword matching on internal rules
+            if not relevant_docs:
+                logger.info("No internal rules docs above threshold, trying keyword matching...")
+                question_lower = user_question.lower()
+                for doc in internal_rules_docs:
+                    source = str(doc.metadata.get("source", "")).lower()
+                    content = doc.page_content.lower()
+                    
+                    # Check if document source or content contains keywords from the question
+                    keywords = question_lower.split()
+                    matching_keywords = sum(1 for kw in keywords if len(kw) > 3 and kw in source)
+                    
+                    if matching_keywords >= 1 or any(kw in content for kw in ["administrator", "responsibilities", "admin", "kpi"]):
+                        relevant_docs.append(doc)
+                        logger.info(f"Keyword match found in {source}")
+                        if len(relevant_docs) >= 3:
+                            break
         except Exception as e:
             logger.error(f"RAG retrieval failed in Q&A mode: {e}")
+            logger.error(f"Full traceback: {traceback.format_exc()}")
             relevant_docs = []
 
         # --- 2. If we have relevant docs, ask the LLM to answer ---
         if relevant_docs:
             context_str = self.rag.get_context_string(relevant_docs)
-            qa_system_prompt = (
-                "You are a helpful onboarding assistant for TechVenture Solutions.\n"
-                "The newcomer has a question. Answer it using ONLY the company documents below.\n"
-                "Be concise (3-5 sentences). If the documents don't fully cover the question, "
-                "say so honestly and suggest who to contact.\n"
-                "After your answer, remind the user they can ask more questions or say "
-                "**'move on'** to continue onboarding.\n\n"
-                f"--- Company Documents ---\n{context_str}\n---"
-            )
+            
+            # Different prompts for onboarding vs post-onboarding
+            if current_stage == "completed":
+                qa_system_prompt = (
+                    "You are a helpful assistant for TechVenture Solutions.\n"
+                    "Answer the user's question using ONLY the company documents below.\n"
+                    "Be concise (3-5 sentences). If the documents don't fully cover the question, "
+                    "say so honestly and suggest who to contact.\n\n"
+                    f"--- Company Documents ---\n{context_str}\n---"
+                )
+            else:
+                qa_system_prompt = (
+                    "You are a helpful onboarding assistant for TechVenture Solutions.\n"
+                    "The newcomer has a question. Answer it using ONLY the company documents below.\n"
+                    "Be concise (3-5 sentences). If the documents don't fully cover the question, "
+                    "say so honestly and suggest who to contact.\n"
+                    "After your answer, remind the user they can ask more questions or say "
+                    "**'move on'** to continue onboarding.\n\n"
+                    f"--- Company Documents ---\n{context_str}\n---"
+                )
             try:
                 messages = [
                     SystemMessage(content=qa_system_prompt),
@@ -876,7 +946,13 @@ Rules:
                 contact = dept
                 break
 
-        state["response"] = self._QA_DEFAULT_FALLBACK.format(contact=contact)
+        # Use different fallback messages for onboarding vs post-onboarding
+        if current_stage == "completed":
+            fallback_template = self._QA_COMPLETED_FALLBACK
+        else:
+            fallback_template = self._QA_DEFAULT_FALLBACK
+        
+        state["response"] = fallback_template.format(contact=contact)
         state["next_stage"] = None
         state["extracted_facts"] = {}
         state["onboarding_facts"] = onboarding_facts

@@ -198,9 +198,34 @@ def _handle_oauth_callback():
 def initialize_system():
     """Initialize database and RAG system."""
     init_db()
-    rag = initialize_rag_system()
-    logger.info("System initialized")
+    # Always force reload to ensure internal rules are indexed
+    rag = initialize_rag_system(force_reload=True)
+    logger.info("System initialized with force_reload=True")
     return rag
+
+# Clear cache and vector store on app startup to ensure fresh initialization
+if "app_startup" not in st.session_state:
+    st.session_state.app_startup = True
+    st.cache_resource.clear()
+    
+    # Check if vector store contains internal rules documents
+    try:
+        from backend.rag.vector_store import VectorStore
+        from pathlib import Path
+        
+        vs = VectorStore()
+        docs = vs.list_all_documents()
+        has_internal_rules = any(d.get("origin") == "internal_rules" for d in docs)
+        
+        if not has_internal_rules and len(docs) > 0:
+            logger.info("Vector store missing internal rules documents, clearing...")
+            import shutil
+            chroma_path = Path(__file__).parent / "chroma_db"
+            if chroma_path.exists():
+                shutil.rmtree(chroma_path)
+                logger.info("Vector store cleared, will reinitialize on next load")
+    except Exception as e:
+        logger.warning(f"Could not check vector store: {e}")
 
 
 @st.cache_data(ttl=600)
@@ -1096,17 +1121,6 @@ if _onboarding_complete:
                 })
         st.rerun()
 
-    # Footer metrics
-    st.markdown("---")
-    _fc1, _fc2 = st.columns(2)
-    with _fc1:
-        st.metric("💬 Messages", len(st.session_state.ds_messages))
-    with _fc2:
-        try:
-            _ds_dc = rag.vector_store.get_collection_count()
-            st.metric("📚 Knowledge Base", f"{_ds_dc} docs")
-        except Exception:
-            st.metric("📚 Knowledge Base", "Loading...")
 
     st.stop()  # Skip the entire onboarding UI below
 
