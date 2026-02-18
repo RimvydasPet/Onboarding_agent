@@ -11,6 +11,9 @@ from backend.config import settings
 from backend.memory.long_term import LongTermMemory
 from backend.agent.nodes import AgentNodes
 from backend.auth.oauth import GoogleOAuthHandler
+from backend.admin.dashboard import AdminDashboard
+from backend.admin.queries import AdminQueries
+from backend.admin.utils import AdminUtils
 import logging
 from sqlalchemy.orm.attributes import flag_modified
 from io import BytesIO
@@ -684,6 +687,11 @@ def _is_user_admin(email: str) -> bool:
     return settings.is_admin_email(email)
 
 
+# Initialize admin view state
+if "admin_view_all_onboarded" not in st.session_state:
+    st.session_state.admin_view_all_onboarded = False
+
+
 def _extract_document_links_from_facts(facts: dict) -> dict:
     """Extract all document/internal rule links mentioned in onboarding answers."""
     import re
@@ -801,6 +809,72 @@ def _generate_user_onboarding_pdf(user_id: int, session_id: str, facts: dict) ->
     return buffer.read()
 
 rag = initialize_system()
+
+# ADMIN PANEL - Check if user is admin and show admin dashboard
+_is_admin_user = _is_user_admin(st.session_state.user_email)
+
+if _is_admin_user:
+    # Initialize database for admin
+    db = next(get_db())
+    
+    st.markdown(
+        '<div class="main-header">⚙️ Admin Dashboard</div>',
+        unsafe_allow_html=True,
+    )
+    
+    # Render developers info in sidebar (always visible, not in dropdown)
+    AdminDashboard.render_developers_info(rag, st.session_state)
+    
+    # Main admin content tabs
+    admin_tab1, admin_tab2, admin_tab3, admin_tab4 = st.tabs(
+        ["📊 Overview", "👥 Newcomers", "📚 Documentation", "🔧 System"]
+    )
+    
+    with admin_tab1:
+        st.markdown("### 📊 System Overview")
+        AdminDashboard.render_system_status(rag)
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown("#### Quick Stats")
+            stats = AdminQueries.get_onboarding_stats(db)
+            st.metric("Total Users", stats["total_users"])
+            st.metric("Completed Onboarding", stats["completed_users"])
+        
+        with col2:
+            st.markdown("#### Onboarding Progress")
+            st.metric("In Progress", stats["in_progress_users"])
+            st.metric("Completion Rate", f"{stats['completion_rate']}%")
+    
+    with admin_tab2:
+        if st.session_state.admin_view_all_onboarded:
+            AdminDashboard.render_all_onboarded_users(db)
+        else:
+            AdminDashboard.render_onboarded_newcomers(db)
+    
+    with admin_tab3:
+        AdminDashboard.render_documentation_upload(rag)
+    
+    with admin_tab4:
+        st.markdown("### 🔧 System Configuration")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown("#### RAG Configuration")
+            try:
+                doc_count = rag.vector_store.get_collection_count()
+                st.info(f"📊 **Indexed Documents:** {doc_count}")
+            except Exception as e:
+                st.error(f"Error reading RAG status: {str(e)[:50]}")
+        
+        with col2:
+            st.markdown("#### API Configuration")
+            provider = str(getattr(settings, "WEB_SEARCH_PROVIDER", "tavily") or "tavily").strip().lower()
+            key_len = len(str(getattr(settings, "TAVILY_API_KEY", "") or "").strip())
+            st.info(f"🔍 **Web Search:** {provider.upper()}")
+            st.caption(f"API Key configured: {'✅ Yes' if key_len > 0 else '❌ No'}")
+    
+    st.stop()
 
 st.sidebar.title("🎯 Onboarding Progress")
 
