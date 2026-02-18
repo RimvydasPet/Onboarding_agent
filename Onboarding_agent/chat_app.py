@@ -9,7 +9,6 @@ from backend.database.models import OnboardingProfileDB
 from backend.models.schemas import OnboardingStage
 from backend.config import settings
 from backend.memory.long_term import LongTermMemory
-from backend.agent.nodes import AgentNodes
 from backend.auth.oauth import GoogleOAuthHandler
 from backend.admin.dashboard import AdminDashboard
 from backend.admin.queries import AdminQueries
@@ -19,12 +18,10 @@ from sqlalchemy.orm.attributes import flag_modified
 from io import BytesIO
 from pathlib import Path
 from reportlab.lib.pagesizes import letter
-from reportlab.pdfgen import canvas
 import json
 import urllib.request
 import urllib.error
 import time
-from urllib.parse import parse_qs, urlparse
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

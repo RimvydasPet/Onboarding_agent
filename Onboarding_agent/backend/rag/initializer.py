@@ -1,8 +1,6 @@
 from backend.rag.agentic_rag import AgenticRAG
-from backend.rag.sample_documents import get_sample_documents
 from pathlib import Path
 from langchain_core.documents import Document
-from io import BytesIO
 import logging
 
 logger = logging.getLogger(__name__)
@@ -105,23 +103,17 @@ def initialize_rag_system(force_reload: bool = False) -> AgenticRAG:
             
             documents = []
             
-            # Load internal rules documents first
+            # Load internal rules documents
             logger.info("Loading internal rules documents...")
             internal_docs = load_internal_rules_documents()
             logger.info(f"Loaded {len(internal_docs)} internal rules documents")
             documents.extend(internal_docs)
             
-            # Load sample documents
-            logger.info("Loading sample documents...")
-            sample_docs = get_sample_documents()
-            logger.info(f"Loaded {len(sample_docs)} sample documents")
-            documents.extend(sample_docs)
-            
             if documents:
-                logger.info(f"Initializing knowledge base with {len(documents)} total documents...")
+                logger.info(f"Initializing knowledge base with {len(documents)} documents...")
                 rag.initialize_knowledge_base(documents)
                 final_count = rag.vector_store.get_collection_count()
-                logger.info(f"Knowledge base initialized with {final_count} chunks ({len(internal_docs)} internal rules + {len(sample_docs)} sample)")
+                logger.info(f"Knowledge base initialized with {final_count} chunks")
             else:
                 logger.warning("No documents to load")
         else:
@@ -134,8 +126,6 @@ def initialize_rag_system(force_reload: bool = False) -> AgenticRAG:
             documents = []
             internal_docs = load_internal_rules_documents()
             documents.extend(internal_docs)
-            sample_docs = get_sample_documents()
-            documents.extend(sample_docs)
             if documents:
                 rag.initialize_knowledge_base(documents)
                 logger.info(f"Loaded {len(documents)} documents in fallback mode")

@@ -21,14 +21,14 @@ An intelligent onboarding assistant powered by Google Gemini AI with dual-layer 
 
 This project is a **production-ready AI onboarding assistant** featuring:
 
-- 🤖 **Google Gemini 2.0 Flash** - Advanced LLM for natural conversations
-- 🔐 **JWT Authentication** - Secure user registration and login
+- 🤖 **Google Gemini AI** - Advanced LLM for natural conversations
+- 🔐 **Google OAuth** - Secure user authentication
 - 🧠 **Dual-Layer Memory** - Redis (short-term) + SQL (long-term)
-- 📚 **RAG System** - ChromaDB vector store with 10 onboarding documents
+- 📚 **RAG System** - ChromaDB vector store with 14 internal rules documents
 - 🔄 **LangGraph Agent** - 5-node agentic workflow for intelligent responses
-- 🎨 **Two UIs** - Simple chat + Advanced chat with RAG
-- 🚀 **REST API** - FastAPI with protected endpoints
+- 💬 **Advanced Chat with RAG** - Document retrieval with source citations
 - 📊 **Stage-Based Flow** - 5 onboarding stages with progress tracking
+- 👨‍💼 **Admin Dashboard** - Manage users and view onboarding statistics
 
 ---
 
@@ -224,113 +224,23 @@ Download from https://redis.io/download
 
 ### Quick Start
 
-#### Option 1: Simple Chat (No RAG)
-
-```bash
-streamlit run simple_chat_app.py
-```
-
-**Features:**
-- Fast and lightweight
-- General conversational AI
-- Memory systems
-- Good for basic onboarding
-
-#### Option 2: Advanced Chat with RAG + Agent
+#### Start the Chat Application
 
 ```bash
 streamlit run chat_app.py
 ```
 
-**Features:**
-- Full RAG (Retrieval-Augmented Generation)
-- LangGraph agentic workflow
-- Document retrieval from knowledge base
-- Source citations
-- More accurate, grounded responses
-
 Open your browser to `http://localhost:8501`
 
-#### Option 3: REST API Server with Authentication 🔐
-
-```bash
-# Start the API server
-uvicorn api:app --reload --port 8000
-
-# Or use the convenience script
-chmod +x run_api.sh
-./run_api.sh
-```
-
 **Features:**
-- RESTful API for integration with other applications
-- JWT-based authentication for secure access
-- Protected chat endpoint requiring authentication
-- User registration and login
-- Automatic session management
-- CORS enabled for web applications
-- Interactive API documentation at `http://localhost:8000/docs`
-
-**Authentication Flow:**
-
-1. **Register a new user:**
-```bash
-curl -X POST "http://localhost:8000/auth/register" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "user@example.com",
-    "password": "securepassword123",
-    "full_name": "John Doe"
-  }'
-```
-
-2. **Login to get access token:**
-```bash
-curl -X POST "http://localhost:8000/auth/login" \
-  -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "username=user@example.com&password=securepassword123"
-```
-
-**Response:**
-```json
-{
-  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "token_type": "bearer"
-}
-```
-
-3. **Use the token to access protected endpoints:**
-```bash
-# Send a chat message (requires authentication)
-curl -X POST "http://localhost:8000/chat" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
-  -d '{
-    "message": "How do I create a project?",
-    "session_id": "my-session-123"
-  }'
-```
-
-**Response:**
-```json
-{
-  "response": "To create a project...",
-  "session_id": "my-session-123",
-  "sources": [
-    {
-      "content": "...",
-      "metadata": {"source": "projects_guide.md"}
-    }
-  ],
-  "current_stage": "welcome"
-}
-```
-
-4. **Get current user information:**
-```bash
-curl -X GET "http://localhost:8000/auth/me" \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
-```
+- 🔐 Google OAuth authentication
+- 💬 Full RAG (Retrieval-Augmented Generation) with internal rules documents
+- 🔄 LangGraph agentic workflow
+- 📚 Document retrieval from 14 internal rules documents
+- 📖 Source citations for transparency
+- 👨‍💼 Admin dashboard for managing users
+- 📊 Progress tracking through 5 onboarding stages
+- 🧠 Dual-layer memory system (short-term + long-term)
 
 The interface will show:
 - 💬 Interactive chat with the AI assistant
@@ -341,31 +251,61 @@ The interface will show:
 
 ### Try These Questions
 
-Once the app is running, try asking:
+Once the app is running, try asking questions about internal company policies:
 
-**General Questions:**
-- "How do I create a new project?"
-- "What features are available?"
-- "Tell me about getting started"
+**IT Administrator Questions:**
+- "What is IT Administrator Responsibilities?"
+- "What are IT Administrator KPIs?"
+- "Explain IT onboarding credentials"
 
-**Specific Questions (RAG excels here):**
-- "What integrations are available?"
-- "How do I set up two-factor authentication?"
-- "What are the keyboard shortcuts?"
-- "What's included in the Pro plan?"
-- "How do I use the mobile app?"
+**Work Policy Questions:**
+- "What are remote and hybrid work guidelines?"
+- "Explain work environment requirements"
+- "What is the employee code of conduct?"
+
+**Security Questions:**
+- "What is endpoint security baseline?"
+- "How do I report a security incident?"
+- "What are data classification standards?"
+
+**HR & Benefits Questions:**
+- "What are leave and time off policies?"
+- "Explain travel and expense reimbursement"
+- "What workplace safety rules apply?"
 
 The assistant will:
-- Retrieve relevant documentation from the knowledge base
-- Provide accurate, cited responses
+- Retrieve relevant documentation from internal rules
+- Provide accurate, cited responses from company documents
 - Remember your conversation history
 - Track your progress through onboarding stages
 - Save important preferences to long-term memory
-- Show sources for transparency (RAG version)
+- Show sources for transparency with document names and relevance scores
 
 ---
 
 ## 🔧 Technical Implementation
+
+### RAG System (Internal Rules Documents)
+
+The RAG system automatically loads 14 internal rules documents from the `../Internal rules/` folder:
+
+```python
+# Documents are loaded during initialization
+from backend.rag.initializer import load_internal_rules_documents
+
+docs = load_internal_rules_documents()
+# Returns 14 Document objects with metadata:
+# - origin: "internal_rules"
+# - source: filename
+# - category: "internal_rules"
+```
+
+**Key Features:**
+- Automatic document discovery from Internal rules folder
+- Semantic search with ChromaDB vector store
+- Keyword matching fallback for better retrieval
+- Source citations with relevance scores
+- Filters to return only internal rules documents (excludes sample docs)
 
 ### Memory Integration
 
@@ -385,9 +325,9 @@ context = short_term_memory.get_context(session_id)
 # Save important information
 long_term_memory.save_memory(
     user_id=1,
-    memory_type="preference",
-    key="learning_style",
-    value="visual",
+    memory_type="onboarding",
+    key="welcome.role",
+    value="IT Administrator",
     importance=5
 )
 
@@ -399,6 +339,7 @@ memories = long_term_memory.get_important_memories(user_id, min_importance=3)
 
 - **Redis Connection Failures**: Automatic fallback to in-memory storage
 - **LLM API Errors**: Displays user-friendly error messages
+- **RAG Retrieval Failures**: Falls back to contact information
 - **Database Errors**: Logged with helpful context
 - **Invalid Input**: Validation with clear feedback
 
@@ -410,163 +351,33 @@ Settings are managed through `.env` file:
 # Required - Get from https://aistudio.google.com/app/apikey
 GOOGLE_API_KEY=your_google_api_key_here
 
+# Google OAuth (Required for authentication)
+GOOGLE_OAUTH_CLIENT_ID=your_client_id.apps.googleusercontent.com
+GOOGLE_OAUTH_CLIENT_SECRET=your_client_secret
+
 # Database (SQLite by default)
 DATABASE_URL=sqlite:///./onboarding.db
 
 # Redis (optional - falls back to in-memory if unavailable)
 REDIS_URL=redis://localhost:6379/0
 
-# Authentication (Required for API)
-SECRET_KEY=your-secret-key-change-in-production
-ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=30
+# Admin emails (comma-separated)
+ADMIN_EMAILS=admin@company.com,manager@company.com
 ```
 
 **Configuration Details:**
 
 - **GOOGLE_API_KEY**: Required for Gemini AI. Get yours at https://aistudio.google.com/app/apikey
+- **GOOGLE_OAUTH_CLIENT_ID/SECRET**: Required for Google OAuth. Set up at https://console.cloud.google.com/
 - **DATABASE_URL**: SQLite database path (auto-created on first run)
 - **REDIS_URL**: Redis connection URL (optional, uses in-memory fallback if unavailable)
-- **SECRET_KEY**: JWT signing key (generate with `python -c "import secrets; print(secrets.token_urlsafe(32))"`)
-- **ALGORITHM**: JWT algorithm (HS256 recommended)
-- **ACCESS_TOKEN_EXPIRE_MINUTES**: Token validity duration (default: 30 minutes)
+- **ADMIN_EMAILS**: Comma-separated list of admin user emails
 
 Configuration is loaded via `backend/config.py` using Pydantic Settings with automatic validation.
 
 ---
 
 ## 📚 Documentation
-
-### API Reference
-
-The REST API is implemented using FastAPI and available at `http://localhost:8000` when running `uvicorn api:app --reload --port 8000`.
-
-#### Endpoints
-
-**Public Endpoints:**
-
-**GET /** - Health check
-```json
-{
-  "status": "healthy",
-  "service": "AI Onboarding Assistant API",
-  "version": "1.0.0"
-}
-```
-
-**GET /health** - Detailed health check
-```json
-{
-  "status": "healthy",
-  "components": {
-    "api": "operational",
-    "database": "operational",
-    "agent": "operational"
-  }
-}
-```
-
-**Authentication Endpoints:**
-
-**POST /auth/register** - Register a new user
-
-Request:
-```json
-{
-  "email": "user@example.com",
-  "password": "securepassword123",
-  "full_name": "John Doe"
-}
-```
-
-Response:
-```json
-{
-  "id": 1,
-  "email": "user@example.com",
-  "full_name": "John Doe",
-  "is_active": true,
-  "role": "user",
-  "created_at": "2024-01-25T12:00:00"
-}
-```
-
-**POST /auth/login** - Login and get access token
-
-Request (form-data):
-```
-username: user@example.com
-password: securepassword123
-```
-
-Response:
-```json
-{
-  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "token_type": "bearer"
-}
-```
-
-**GET /auth/me** - Get current user information (Protected)
-
-Headers:
-```
-Authorization: Bearer YOUR_ACCESS_TOKEN
-```
-
-Response:
-```json
-{
-  "id": 1,
-  "email": "user@example.com",
-  "full_name": "John Doe",
-  "is_active": true,
-  "role": "user",
-  "created_at": "2024-01-25T12:00:00"
-}
-```
-
-**Protected Endpoints:**
-
-**POST /chat** - Conversational AI endpoint (Requires Authentication)
-
-Headers:
-```
-Authorization: Bearer YOUR_ACCESS_TOKEN
-Content-Type: application/json
-```
-
-Request:
-```json
-{
-  "message": "How do I create a project?",
-  "session_id": "optional-session-id"
-}
-```
-
-Response:
-```json
-{
-  "response": "To create a project...",
-  "session_id": "session-123",
-  "sources": [
-    {
-      "content": "Project creation guide...",
-      "metadata": {"source": "projects_guide.md", "stage": "key_responsibilities"}
-    }
-  ],
-  "current_stage": "welcome"
-}
-```
-
-**Interactive Documentation:**
-Visit `http://localhost:8000/docs` for Swagger UI with interactive API testing.
-
-**Security Notes:**
-- Access tokens expire after 30 minutes (configurable)
-- Passwords are hashed using bcrypt
-- JWT tokens are signed with HS256 algorithm
-- All protected endpoints require valid authentication
 
 ### Database Schema
 
@@ -639,66 +450,46 @@ Visit `http://localhost:8000/docs` for Swagger UI with interactive API testing.
 
 ## 🧪 Testing
 
-### Automated Tests
-
-The project includes several test scripts to verify functionality:
-
-**1. Authentication System Tests**
-```bash
-python test_auth.py
-```
-Tests user registration, login, token validation, and protected endpoints.
-
-**2. API Endpoint Tests**
-```bash
-python test_api.py
-```
-Tests the REST API endpoints including chat functionality.
-
-**3. cURL-based API Tests**
-```bash
-chmod +x test_api_curl.sh
-./test_api_curl.sh
-```
-Shell script with cURL commands for API testing.
-
-**4. Memory Fallback Tests**
-```bash
-python test_memory_fallback.py
-```
-Tests the memory system's fallback mechanism when Redis is unavailable.
-
 ### Manual Testing
 
 **Streamlit Chat Interface:**
-1. Start chat interface: `streamlit run simple_chat_app.py` or `streamlit run chat_app.py`
-2. Try these queries:
-   - "How do I create a new project?"
-   - "What features are available?"
-   - "Tell me about getting started"
-   - "I need help with my account"
-   - "What integrations are available?"
-3. Test stage progression by changing stages in the sidebar
-4. Verify memory by asking follow-up questions
-5. Check session management with "New Session" button
-6. View sources in the advanced chat app
 
-**REST API Testing:**
-1. Start API server: `uvicorn api:app --reload --port 8000`
-2. Visit interactive docs: `http://localhost:8000/docs`
-3. Test authentication flow:
-   - Register a new user
-   - Login to get access token
-   - Use token to access protected endpoints
-4. Test chat endpoint with various queries
-
-### Utility Scripts
-
-**Clear Memory Storage**
+1. Start the chat application:
 ```bash
-python clear_memories.py
+streamlit run chat_app.py
 ```
-Clears all stored memories (useful for testing fresh starts).
+
+2. **Test Google OAuth Login:**
+   - Click "Sign in with Google"
+   - Complete Google authentication
+   - Verify you're logged in
+
+3. **Test Onboarding Flow:**
+   - Complete the Welcome stage (name, role, department, etc.)
+   - Progress through Department Info, Key Responsibilities, Tools & Systems, Training Needs
+   - View progress in the sidebar
+
+4. **Test RAG Document Retrieval:**
+   - Ask: "What is IT Administrator Responsibilities?"
+   - Ask: "Explain work environment"
+   - Ask: "What are remote and hybrid work guidelines?"
+   - Verify sources are shown with document names and relevance scores
+
+5. **Test Admin Dashboard (if admin user):**
+   - View system overview and statistics
+   - Check newcomers and onboarding progress
+   - Upload documentation
+   - View system configuration
+
+6. **Test Memory Systems:**
+   - Ask follow-up questions to verify conversation history is remembered
+   - Complete a stage and revisit it to see saved progress
+   - Check that user preferences are preserved across sessions
+
+7. **Test Session Management:**
+   - Use "🔄 New Session" button to start fresh
+   - Verify old conversation history is cleared
+   - Confirm onboarding progress is maintained
 
 ---
 
@@ -712,11 +503,15 @@ Onboarding_agent/
 │   │   ├── state.py     # Agent state definition
 │   │   ├── nodes.py     # Agent nodes (analyze, load memory, retrieve, respond, save)
 │   │   └── graph.py     # LangGraph workflow orchestration
-│   ├── auth/            # Authentication system
+│   ├── auth/            # Google OAuth authentication
 │   │   ├── __init__.py
-│   │   ├── utils.py     # JWT & password hashing utilities
-│   │   ├── dependencies.py  # FastAPI auth dependencies
+│   │   ├── oauth.py     # Google OAuth handler
 │   │   └── service.py   # Authentication service layer
+│   ├── admin/           # Admin dashboard
+│   │   ├── __init__.py
+│   │   ├── dashboard.py # Admin UI components
+│   │   ├── queries.py   # Admin database queries
+│   │   └── utils.py     # Admin utilities
 │   ├── rag/             # RAG system components
 │   │   ├── __init__.py
 │   │   ├── vector_store.py      # ChromaDB integration
@@ -724,8 +519,7 @@ Onboarding_agent/
 │   │   ├── query_planner.py     # Query analysis & planning
 │   │   ├── reranker.py          # Result reranking
 │   │   ├── agentic_rag.py       # Main RAG engine
-│   │   ├── sample_documents.py  # Knowledge base (10 documents)
-│   │   └── initializer.py       # RAG initialization
+│   │   └── initializer.py       # RAG initialization (loads 14 internal rules docs)
 │   ├── memory/          # Dual-layer memory system
 │   │   ├── __init__.py
 │   │   ├── short_term.py    # Redis/in-memory session storage
@@ -736,31 +530,37 @@ Onboarding_agent/
 │   │   └── models.py        # Database models (6 tables)
 │   ├── models/          # Data models
 │   │   ├── __init__.py
-│   │   └── schemas.py       # Pydantic schemas (API & domain models)
+│   │   └── schemas.py       # Pydantic schemas (domain models)
 │   ├── __init__.py
 │   └── config.py        # Configuration management (Pydantic Settings)
-├── venv311/             # Python virtual environment
-├── api.py               # FastAPI REST API server with authentication ⭐
-├── simple_chat_app.py   # Simple Streamlit chat (no RAG)
-├── chat_app.py          # Advanced Streamlit chat with RAG + Agent
-├── run_api.sh           # Convenience script to start API
+├── chat_app.py          # Main Streamlit chat with RAG + Agent + Admin Dashboard
 ├── run_chat.sh          # Convenience script to start chat UI
-├── test_auth.py         # Authentication system tests
-├── test_api.py          # API endpoint tests
-├── test_api_curl.sh     # cURL-based API tests
-├── test_memory_fallback.py  # Memory fallback tests
-├── clear_memories.py    # Utility to clear memory storage
 ├── requirements.txt     # Python dependencies
 ├── onboarding.db        # SQLite database (auto-created)
 ├── README.md            # This file - comprehensive documentation
-├── AUTHENTICATION_GUIDE.md      # Detailed authentication guide
-├── AUTHENTICATION_SUMMARY.md    # Auth implementation summary
-├── IMPLEMENTATION_STATUS.md     # Current project status
-├── FALLBACK_IMPROVEMENTS.md     # Memory fallback documentation
+├── AUTHENTICATION_GUIDE.md      # Google OAuth setup guide
+├── GMAIL_OAUTH_SETUP.md         # Detailed OAuth configuration
+├── ADMIN_PANEL_GUIDE.md         # Admin dashboard documentation
 ├── .env.example         # Environment template
 ├── .env                 # Your configuration (gitignored)
 └── .gitignore           # Git ignore patterns
 ```
+
+**Internal Rules Documents (14 files in `../Internal rules/`):**
+- IT Administrator Responsibilities.md
+- IT Administrator – Yearly KPIs.md
+- IT Onboarding Credentials Guide.md
+- Remote and Hybrid Work Guidelines.md
+- Endpoint Security Baseline.md
+- Access Request and Provisioning Standard.md
+- Acceptable Use of Company Systems.md
+- Data Classification and Handling Standard.md
+- Employee Code of Conduct.md
+- Leave, Time Off, and Absence Reporting.md
+- Travel and Expense Reimbursement Policy.md
+- Security Incident Reporting and Response (Employee Guide).md
+- Workplace Safety and Facilities Rules.md
+- Google Workspace Setup Guide.md
 
 ---
 
@@ -784,5 +584,3 @@ Educational project - Turing College
 - **SQLAlchemy**: Database ORM
 
 ---
-
-**Built with ❤️ for better user onboarding experiences**
