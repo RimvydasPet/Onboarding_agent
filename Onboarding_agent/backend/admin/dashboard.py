@@ -103,29 +103,111 @@ class AdminDashboard:
             st.session_state.admin_view_all_onboarded = True
     
     @staticmethod
-    def render_all_onboarded_users(db: Any) -> None:
-        """Render full list of all onboarded users."""
-        st.markdown("### 📋 All Onboarded Users")
+    def render_newcomers_in_progress(db: Any) -> None:
+        """Render newcomers currently in onboarding progress."""
+        st.markdown("### 🆕 Newcomers In Progress")
         
-        all_users = AdminQueries.get_all_onboarded_users(db)
+        newcomers = AdminQueries.get_newcomers_in_progress(db, limit=15)
         
-        if all_users:
+        if newcomers:
+            st.info(f"📌 {len(newcomers)} newcomer(s) currently in onboarding")
+            
             table_data = []
-            for user in all_users:
+            for user in newcomers:
                 table_data.append({
                     "Name": user["name"],
                     "Email": user["email"],
                     "Role": user["role"],
                     "Department": user["department"],
-                    "Completed": AdminUtils.format_date(user["completed_at"]),
-                    "Joined": AdminUtils.format_date(user["created_at"]),
+                    "Current Stage": user["current_stage"],
+                    "Last Updated": AdminUtils.format_date(user["updated_at"]),
                 })
             
             st.dataframe(table_data, use_container_width=True, hide_index=True)
-            
+        else:
+            st.success("✅ No newcomers in progress - all users have completed onboarding!")
+        
+        st.markdown("---")
+    
+    @staticmethod
+    def render_all_onboarded_users(db: Any) -> None:
+        """Render full list of all onboarded users with PDF reports."""
+        import base64
+        st.markdown("### 📋 All Onboarded Users")
+        
+        all_users = AdminQueries.get_all_onboarded_users(db)
+        
+        if all_users:
             st.caption(f"Total: {len(all_users)} users")
+
+            # Pre-generate all PDFs using user_id directly
+            user_pdfs = {}
+            pdf_errors = []
+            for user in all_users:
+                try:
+                    full_details = AdminQueries.get_full_onboarding_details(user["user_id"], db)
+                    if not full_details:
+                        pdf_errors.append(f"No details found for user_id={user['user_id']}")
+                        continue
+                    buf = AdminUtils.generate_onboarding_pdf(full_details)
+                    if not buf:
+                        pdf_errors.append(f"PDF buffer is None for user_id={user['user_id']}")
+                        continue
+                    pdf_bytes = buf.read()
+                    user_pdfs[user["user_id"]] = {
+                        "bytes": pdf_bytes,
+                        "b64": base64.b64encode(pdf_bytes).decode(),
+                    }
+                except Exception as e:
+                    pdf_errors.append(f"user_id={user['user_id']}: {type(e).__name__}: {e}")
+            if pdf_errors:
+                for err in pdf_errors:
+                    st.warning(f"PDF error: {err}")
+
+            # Header row
+            h1, h2, h3, h4, h5, h6, h7, h8 = st.columns([2, 2, 1.5, 1, 1.2, 1.2, 1.3, 1.3])
+            for col, label in zip(
+                [h1, h2, h3, h4, h5, h6, h7, h8],
+                ["Name", "Email", "Role", "Dept", "First Day", "Completed", "Download", "View"]
+            ):
+                col.markdown(f"**{label}**")
+            st.markdown('<hr style="margin:4px 0 8px 0"/>', unsafe_allow_html=True)
+
+            # One row per user with inline buttons
+            for idx, user in enumerate(all_users):
+                pdf_data = user_pdfs.get(user["user_id"])
+                first_day = user["created_at"].strftime("%Y-%m-%d") if user["created_at"] else "N/A"
+                completed_date = user["completed_at"].strftime("%Y-%m-%d") if user["completed_at"] else "N/A"
+
+                c1, c2, c3, c4, c5, c6, c7, c8 = st.columns([2, 2, 1.5, 1, 1.2, 1.2, 1.3, 1.3])
+                c1.write(user["name"])
+                c2.write(user["email"])
+                c3.write(user["role"])
+                c4.write(user["department"])
+                c5.write(first_day)
+                c6.write(completed_date)
+                with c7:
+                    if pdf_data:
+                        st.download_button(
+                            label="📥 Download",
+                            data=pdf_data["bytes"],
+                            file_name=f"{user['email']}_onboarding.pdf",
+                            mime="application/pdf",
+                            key=f"dl_{idx}",
+                            use_container_width=True,
+                        )
+                with c8:
+                    if pdf_data:
+                        st.markdown(
+                            f'<a href="data:application/pdf;base64,{pdf_data["b64"]}" target="_blank" '
+                            f'style="display:block;padding:6px 8px;background:#667eea;color:white;'
+                            f'text-decoration:none;border-radius:4px;text-align:center;font-size:0.85rem;font-weight:bold;">👁️ View</a>',
+                            unsafe_allow_html=True,
+                        )
         else:
             st.info("No onboarded users yet.")
+        
+        st.markdown("---")
         
         if st.button("← Back to Dashboard", use_container_width=True, key="back_to_dashboard"):
             st.session_state.admin_view_all_onboarded = False

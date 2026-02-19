@@ -997,40 +997,36 @@ if _is_admin_user:
         unsafe_allow_html=True,
     )
     
-    # Render developers info in sidebar (always visible, not in dropdown)
-    AdminDashboard.render_developers_info(rag, st.session_state)
+    # Overview section in sidebar
+    st.sidebar.markdown("### 📊 Overview")
+    st.sidebar.markdown("**Quick Stats**")
+    stats = AdminQueries.get_onboarding_stats(db)
+    st.sidebar.metric("Total Users", stats["total_users"])
+    st.sidebar.metric("Completed Onboarding", stats["completed_users"])
+    
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("**Onboarding Progress**")
+    st.sidebar.metric("In Progress", stats["in_progress_users"])
+    st.sidebar.metric("Completion Rate", f"{stats['completion_rate']}%")
+    
+    st.sidebar.markdown("---")
     
     # Main admin content tabs
-    admin_tab1, admin_tab2, admin_tab3, admin_tab4 = st.tabs(
-        ["📊 Overview", "👥 Newcomers", "📚 Documentation", "🔧 System"]
+    admin_tab1, admin_tab2, admin_tab3 = st.tabs(
+        ["👥 Newcomers", "📚 Documentation", "🔧 System"]
     )
     
     with admin_tab1:
-        st.markdown("### 📊 System Overview")
-        AdminDashboard.render_system_status(rag)
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            st.markdown("#### Quick Stats")
-            stats = AdminQueries.get_onboarding_stats(db)
-            st.metric("Total Users", stats["total_users"])
-            st.metric("Completed Onboarding", stats["completed_users"])
-        
-        with col2:
-            st.markdown("#### Onboarding Progress")
-            st.metric("In Progress", stats["in_progress_users"])
-            st.metric("Completion Rate", f"{stats['completion_rate']}%")
-    
-    with admin_tab2:
         if st.session_state.admin_view_all_onboarded:
             AdminDashboard.render_all_onboarded_users(db)
         else:
+            AdminDashboard.render_newcomers_in_progress(db)
             AdminDashboard.render_onboarded_newcomers(db)
     
-    with admin_tab3:
+    with admin_tab2:
         AdminDashboard.render_documentation_upload(rag)
     
-    with admin_tab4:
+    with admin_tab3:
         st.markdown("### 🔧 System Configuration")
         
         col1, col2 = st.columns(2)

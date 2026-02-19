@@ -4,6 +4,12 @@ from typing import List, Dict, Any
 import uuid
 from io import BytesIO
 import logging
+from reportlab.lib.pagesizes import letter, A4
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak, Table, TableStyle
+from reportlab.lib import colors
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -116,3 +122,210 @@ class AdminUtils:
         except Exception as e:
             logger.error(f"Error deleting file: {e}")
             return False, 0
+    
+    @staticmethod
+    def pdf_to_base64(pdf_buffer: BytesIO) -> str:
+        """Convert PDF buffer to base64 string for embedding in HTML."""
+        import base64
+        pdf_buffer.seek(0)
+        pdf_bytes = pdf_buffer.read()
+        return base64.b64encode(pdf_bytes).decode('utf-8')
+    
+    @staticmethod
+    def generate_onboarding_pdf(onboarding_data: Dict[str, Any]) -> BytesIO:
+        """
+        Generate a summarized onboarding report PDF.
+        Returns: BytesIO object containing the PDF
+        """
+        try:
+            pdf_buffer = BytesIO()
+            doc = SimpleDocTemplate(
+                pdf_buffer,
+                pagesize=A4,
+                rightMargin=0.75*inch,
+                leftMargin=0.75*inch,
+                topMargin=0.75*inch,
+                bottomMargin=0.75*inch,
+            )
+            story = []
+            styles = getSampleStyleSheet()
+
+            title_style = ParagraphStyle(
+                'Title',
+                parent=styles['Heading1'],
+                fontSize=20,
+                textColor=colors.HexColor('#1f3864'),
+                spaceAfter=6,
+                alignment=1,
+            )
+            subtitle_style = ParagraphStyle(
+                'Subtitle',
+                parent=styles['Normal'],
+                fontSize=10,
+                textColor=colors.HexColor('#555555'),
+                spaceAfter=16,
+                alignment=1,
+            )
+            section_style = ParagraphStyle(
+                'Section',
+                parent=styles['Heading2'],
+                fontSize=12,
+                textColor=colors.white,
+                backColor=colors.HexColor('#1f3864'),
+                spaceBefore=14,
+                spaceAfter=6,
+                leftIndent=6,
+                borderPadding=(4, 4, 4, 4),
+            )
+            normal_style = ParagraphStyle(
+                'Body',
+                parent=styles['Normal'],
+                fontSize=9,
+                leading=13,
+            )
+
+            def make_table(data, col_widths=None):
+                if col_widths is None:
+                    col_widths = [2.2*inch, 4.3*inch]
+                t = Table(data, colWidths=col_widths)
+                t.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#e8edf4')),
+                    ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+                    ('FONTSIZE', (0, 0), (-1, -1), 9),
+                    ('TEXTCOLOR', (0, 0), (-1, -1), colors.HexColor('#1a1a1a')),
+                    ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                    ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                    ('TOPPADDING', (0, 0), (-1, -1), 5),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+                    ('LEFTPADDING', (0, 0), (-1, -1), 6),
+                    ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cccccc')),
+                    ('ROWBACKGROUNDS', (0, 0), (-1, -1), [colors.HexColor('#f5f7fb'), colors.white]),
+                ]))
+                return t
+
+            facts = onboarding_data.get("facts", {})
+            completed_steps = onboarding_data.get("completed_steps", []) or []
+            progress = onboarding_data.get("progress", {}) or {}
+
+            def extract_stage_summary(stage_key: str) -> str:
+                """Extract readable 2-3 sentence summary of newcomer answers only."""
+                answers = []
+                field_keys = [k for k in facts.keys() if k.startswith(f"{stage_key}.") and not k.endswith("._qlabel")]
+                for field_key in field_keys:
+                    answer = facts.get(field_key)
+                    if not answer:
+                        continue
+                    answer_str = str(answer).strip()
+                    if answer_str.lower() in ("yes", "no", "move on", "none", ""):
+                        continue
+                    answers.append(answer_str)
+                if not answers:
+                    return ""
+                if stage_key == "welcome":
+                    name = facts.get("welcome.name", "")
+                    role_val = facts.get("welcome.role", "")
+                    dept = facts.get("welcome.department", "")
+                    phone = facts.get("welcome.phone_number", "")
+                    pronouns = facts.get("welcome.pronouns", "")
+                    parts = []
+                    if name and role_val and dept:
+                        parts.append(f"{name} is joining as {role_val} in the {dept} department.")
+                    if phone:
+                        parts.append(f"Contact: {phone}.")
+                    if pronouns and pronouns.lower() != "none":
+                        parts.append(f"Pronouns: {pronouns}.")
+                    return " ".join(parts)
+                return " ".join(answers[:3])
+
+            # ── Title ──────────────────────────────────────────────
+            full_name = onboarding_data.get("full_name") or facts.get("welcome.name", "N/A")
+            role = facts.get("welcome.role", onboarding_data.get("current_stage", "N/A"))
+            department = facts.get("welcome.department", "N/A")
+
+            story.append(Paragraph("Onboarding Summary", title_style))
+            story.append(Paragraph(
+                f"Generated: {datetime.now().strftime('%d %B %Y')}",
+                subtitle_style,
+            ))
+
+            # ── Personal Info ──────────────────────────────────────
+            story.append(Paragraph("Employee Information", section_style))
+            phone = facts.get("welcome.phone_number", "")
+            emergency = facts.get("welcome.emergency_contact", "")
+            pronouns = facts.get("welcome.pronouns", "")
+            personal_rows = [
+                ["Full Name", full_name],
+                ["Email", onboarding_data.get("email", "N/A")],
+                ["Role", role],
+                ["Department", department],
+                ["Start Date", AdminUtils.format_date(onboarding_data.get("created_at"))],
+                ["Onboarding Status", onboarding_data.get("current_stage", "N/A").replace("_", " ").title()],
+            ]
+            if phone:
+                personal_rows.append(["Phone", phone])
+            if emergency:
+                personal_rows.append(["Emergency Contact", emergency])
+            if pronouns and pronouns.lower() != "none":
+                personal_rows.append(["Pronouns", pronouns])
+            story.append(make_table(personal_rows))
+            story.append(Spacer(1, 0.1*inch))
+
+            # ── Stage Summaries ────────────────────────────────────
+            stage_labels = {
+                "welcome":              "Welcome & Profile",
+                "department_info":      "Department Information",
+                "key_responsibilities": "Key Responsibilities",
+                "tools_systems":        "Tools & Systems",
+                "training_needs":       "Training Needs",
+            }
+
+            story.append(Paragraph("Stage Summaries", section_style))
+
+            for stage_key, stage_label in stage_labels.items():
+                # Skip welcome stage - it's now in Employee Information
+                if stage_key == "welcome":
+                    continue
+                
+                # Check if stage has answers (if there are facts for this stage, it was completed)
+                stage_facts = [k for k in facts.keys() if k.startswith(f"{stage_key}.") and not k.endswith("._qlabel")]
+                completed = len(stage_facts) > 0
+                status = "✓ Completed" if completed else "— Not completed"
+
+                stage_heading_style = ParagraphStyle(
+                    f'stage_{stage_key}',
+                    parent=styles['Heading3'],
+                    fontSize=10,
+                    textColor=colors.HexColor('#1f3864') if completed else colors.HexColor('#888888'),
+                    spaceBefore=10,
+                    spaceAfter=4,
+                )
+                story.append(Paragraph(f"{stage_label}  —  {status}", stage_heading_style))
+
+                summary = extract_stage_summary(stage_key)
+                if summary:
+                    story.append(Paragraph(summary, normal_style))
+                elif completed:
+                    story.append(Paragraph("Stage completed.", normal_style))
+                else:
+                    story.append(Paragraph("Not yet completed.", normal_style))
+
+                story.append(Spacer(1, 0.05*inch))
+
+            # ── Footer ─────────────────────────────────────────────
+            story.append(Spacer(1, 0.2*inch))
+            story.append(Paragraph(
+                f"Confidential — {full_name} onboarding report — {datetime.now().strftime('%Y-%m-%d')}",
+                ParagraphStyle('Footer', parent=styles['Normal'], fontSize=7,
+                               textColor=colors.grey, alignment=1),
+            ))
+
+            try:
+                doc.build(story)
+                pdf_buffer.seek(0)
+                return pdf_buffer
+            except Exception as build_error:
+                logger.error(f"Error building PDF document: {build_error}", exc_info=True)
+                return None
+        except Exception as e:
+            logger.error(f"Error generating PDF: {type(e).__name__}: {e}", exc_info=True)
+            return None
