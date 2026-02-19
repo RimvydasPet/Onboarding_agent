@@ -55,6 +55,8 @@ def load_internal_rules_documents() -> list[Document]:
                     page_content=enhanced_content,
                     metadata={
                         "source": file_name,
+                        "file_name": file_name,
+                        "file_path": str(file_path),
                         "category": "internal_rules",
                         "origin": "internal_rules"
                     }

@@ -924,17 +924,28 @@ Rules:
                 state["next_stage"] = None
                 state["extracted_facts"] = {}
                 state["onboarding_facts"] = onboarding_facts
-                # Expose sources so the UI can show them
+                # Expose sources so the UI can show them with clickable links
                 sources = []
                 for doc in relevant_docs:
-                    sources.append({
+                    source_info = {
                         "source": doc.metadata.get("source", "unknown"),
                         "category": doc.metadata.get("category", "general"),
                         "score": doc.metadata.get("score", 0.0),
                         "preview": doc.page_content[:150] + "...",
                         "file_name": doc.metadata.get("file_name", ""),
                         "upload_id": doc.metadata.get("upload_id", ""),
-                    })
+                    }
+                    
+                    # Add document link for clickable access
+                    file_path = doc.metadata.get("file_path", "")
+                    if file_path:
+                        source_info["document_link"] = file_path
+                    elif doc.metadata.get("source"):
+                        # Construct link from source name
+                        source_name = str(doc.metadata.get("source", "")).replace(" ", "_")
+                        source_info["document_link"] = f"internal_rules/{source_name}"
+                    
+                    sources.append(source_info)
                 state["sources"] = sources
                 return state
 
@@ -1701,3 +1712,46 @@ Rules:
             logger.error(f"Error in save_memory: {e}")
         
         return state
+
+    def _generate_completion_summary(self, onboarding_facts: dict) -> str:
+        """
+        Generate a user-friendly summary of completed onboarding.
+        
+        Args:
+            onboarding_facts: Dictionary of collected onboarding facts
+            
+        Returns:
+            Formatted summary string
+        """
+        user_name = onboarding_facts.get('welcome.name', 'Team Member')
+        user_role = onboarding_facts.get('welcome.role', 'N/A')
+        user_department = onboarding_facts.get('welcome.department', 'N/A')
+        
+        summary_parts = [
+            f"## 🎉 Welcome to TechVenture Solutions, {user_name}!",
+            "",
+            "Your onboarding is now complete. Here's what we covered:",
+            "",
+            "### Your Profile",
+            f"- **Name:** {user_name}",
+            f"- **Role:** {user_role}",
+            f"- **Department:** {user_department}",
+            "",
+            "### Onboarding Stages Completed",
+            "✅ **Welcome & Profile Setup** — Your personal and contact information",
+            "✅ **Department Information** — Team structure and key contacts",
+            "✅ **Key Responsibilities** — Your role duties and success metrics",
+            "✅ **Tools & Systems** — IT setup and software access",
+            "✅ **Training Needs** — Learning paths and compliance training",
+            "",
+            "### What's Next?",
+            "You're now fully set up and ready to contribute! Remember:",
+            "- Check your email for important documents and access credentials",
+            "- Reach out to your manager for any questions",
+            "- Use the search feature below to find company policies and procedures",
+            "- Schedule your 30-day check-in with HR",
+            "",
+            "**Questions?** I'm here to help! Search for any company policies, procedures, or internal rules using the search box below.",
+        ]
+        
+        return "\n".join(summary_parts)

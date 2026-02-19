@@ -26,6 +26,159 @@ import time
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
+def _get_document_content(file_path: str) -> tuple[str, str]:
+    """
+    Read document content and determine MIME type.
+    
+    Args:
+        file_path: Path to the document file
+        
+    Returns:
+        Tuple of (content, mime_type)
+    """
+    try:
+        file_path_obj = Path(file_path)
+        if not file_path_obj.exists():
+            return "", "text/plain"
+        
+        suffix = file_path_obj.suffix.lower()
+        
+        if suffix == ".pdf":
+            with open(file_path, "rb") as f:
+                content = f.read()
+            return content, "application/pdf"
+        elif suffix in [".md", ".markdown", ".txt"]:
+            with open(file_path, "r", encoding="utf-8", errors="replace") as f:
+                content = f.read()
+            return content, "text/plain"
+        else:
+            with open(file_path, "r", encoding="utf-8", errors="replace") as f:
+                content = f.read()
+            return content, "text/plain"
+    except Exception as e:
+        logger.error(f"Error reading document {file_path}: {e}")
+        return "", "text/plain"
+
+
+def _create_document_download_link(file_path: str, file_name: str) -> bytes:
+    """
+    Create downloadable content from a document file.
+    
+    Args:
+        file_path: Path to the document file
+        file_name: Name of the file for download
+        
+    Returns:
+        File content as bytes
+    """
+    try:
+        file_path_obj = Path(file_path)
+        if not file_path_obj.exists():
+            return b""
+        
+        with open(file_path, "rb") as f:
+            return f.read()
+    except Exception as e:
+        logger.error(f"Error reading document {file_path}: {e}")
+        return b""
+
+
+def _convert_to_pdf(file_path: str) -> bytes:
+    """
+    Convert document to PDF format.
+    
+    Args:
+        file_path: Path to the document file
+        
+    Returns:
+        PDF content as bytes
+    """
+    try:
+        file_path_obj = Path(file_path)
+        if not file_path_obj.exists():
+            return b""
+        
+        suffix = file_path_obj.suffix.lower()
+        
+        # If already PDF, return as is
+        if suffix == ".pdf":
+            with open(file_path, "rb") as f:
+                return f.read()
+        
+        # For text/markdown files, convert to PDF
+        if suffix in [".md", ".markdown", ".txt"]:
+            try:
+                from reportlab.lib.pagesizes import letter
+                from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+                from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak
+                from reportlab.lib.units import inch
+                from reportlab.lib import colors
+                from reportlab.lib.enums import TA_LEFT
+                
+                with open(file_path, "r", encoding="utf-8", errors="replace") as f:
+                    text_content = f.read()
+                
+                buffer = BytesIO()
+                doc = SimpleDocTemplate(buffer, pagesize=letter, topMargin=0.5*inch, bottomMargin=0.5*inch)
+                story = []
+                styles = getSampleStyleSheet()
+                
+                # Custom style for document content
+                content_style = ParagraphStyle(
+                    'ContentStyle',
+                    parent=styles['Normal'],
+                    fontSize=11,
+                    leading=14,
+                    alignment=TA_LEFT,
+                    spaceAfter=12
+                )
+                
+                # Add title
+                title_style = ParagraphStyle(
+                    'TitleStyle',
+                    parent=styles['Heading1'],
+                    fontSize=16,
+                    textColor=colors.HexColor('#667eea'),
+                    spaceAfter=20,
+                    fontName='Helvetica-Bold'
+                )
+                story.append(Paragraph(file_path_obj.stem.replace("_", " ").title(), title_style))
+                story.append(Spacer(1, 0.3*inch))
+                
+                # Split content into paragraphs and add to PDF
+                paragraphs = text_content.split('\n\n')
+                for para in paragraphs:
+                    if para.strip():
+                        # Handle markdown headers
+                        if para.startswith('##'):
+                            para = para.replace('##', '').strip()
+                            story.append(Paragraph(para, styles['Heading2']))
+                        elif para.startswith('#'):
+                            para = para.replace('#', '').strip()
+                            story.append(Paragraph(para, styles['Heading1']))
+                        else:
+                            # Clean up markdown formatting
+                            para = para.replace('**', '').replace('__', '').replace('*', '').replace('_', '')
+                            story.append(Paragraph(para, content_style))
+                        story.append(Spacer(1, 0.1*inch))
+                
+                doc.build(story)
+                buffer.seek(0)
+                return buffer.read()
+            except ImportError:
+                logger.warning("ReportLab not available, returning text as is")
+                with open(file_path, "r", encoding="utf-8", errors="replace") as f:
+                    return f.read().encode('utf-8')
+        
+        # For other file types, return as is
+        with open(file_path, "rb") as f:
+            return f.read()
+    except Exception as e:
+        logger.error(f"Error converting document to PDF {file_path}: {e}")
+        return b""
+
+
 st.set_page_config(
     page_title="Onboarding Assistant with RAG",
     page_icon="🤖",
@@ -1002,9 +1155,17 @@ if _onboarding_complete:
 
     # --- Main area for Document Search mode ---
     st.markdown(
-        '<div class="main-header">📖 Internal Rules & Policy Search</div>',
+        '<div class="main-header">🎉 Onboarding Complete</div>',
         unsafe_allow_html=True,
     )
+
+    # Display completion summary for non-admin users
+    if not _is_admin:
+        from backend.agent.nodes import AgentNodes
+        agent_nodes = AgentNodes()
+        completion_summary = agent_nodes._generate_completion_summary(_early_facts)
+        st.markdown(completion_summary)
+        st.markdown("---")
 
     if _user_name:
         st.markdown(
@@ -1025,8 +1186,8 @@ if _onboarding_complete:
     if not _is_admin:
         _user_links = _extract_document_links_from_facts(_early_facts)
         if _user_links:
-            st.markdown("### 📚 Your Onboarding Resources")
-            st.markdown("Here are all the documents and resources mentioned during your onboarding:")
+            st.markdown("### 📚 Resources by Stage")
+            st.markdown("Click on any stage below to view the documents and links mentioned during your onboarding:")
             
             for stage, links_data in sorted(_user_links.items()):
                 if links_data['urls'] or links_data['docs']:
@@ -1038,16 +1199,20 @@ if _onboarding_complete:
                         'training_needs': '📚 Training Needs'
                     }.get(stage, stage.replace('_', ' ').title())
                     
-                    with st.expander(stage_title, expanded=True):
-                        if links_data['urls']:
-                            st.markdown("**Links:**")
+                    resource_count = len(set(links_data.get('urls', []) + links_data.get('docs', [])))
+                    with st.expander(f"{stage_title} ({resource_count} resources)", expanded=False):
+                        if links_data.get('urls'):
+                            st.markdown("**📎 Links:**")
                             for url in set(links_data['urls']):
-                                st.markdown(f"- [🔗 {url}]({url})")
+                                st.markdown(f"- [🔗 Open Link]({url})")
                         
-                        if links_data['docs']:
-                            st.markdown("**Documents:**")
+                        if links_data.get('docs'):
+                            st.markdown("**📄 Documents:**")
                             for doc in set(links_data['docs']):
                                 st.markdown(f"- {doc.strip()}")
+            st.markdown("---")
+        else:
+            st.info("📚 No specific resources were mentioned during your onboarding. Use the search box below to find company policies and procedures.")
             st.markdown("---")
 
     # Initialise document-search message history (separate from onboarding messages)
@@ -1067,18 +1232,56 @@ if _onboarding_complete:
                 unsafe_allow_html=True,
             )
             if _ds_msg.get("sources"):
-                with st.expander(f"📚 Sources ({len(_ds_msg['sources'])})"):
+                with st.expander(f"📚 Resources ({len(_ds_msg['sources'])})"):
                     for _si, _src in enumerate(_ds_msg["sources"], 1):
                         _src_display = _src.get("file_name") or _src.get("source", "unknown")
-                        st.markdown(
-                            f'<div class="source-card">'
-                            f'<strong>Source {_si}:</strong> {_src_display}<br>'
-                            f'<strong>Category:</strong> {_src.get("category", "general")}<br>'
-                            f'<strong>Relevance:</strong> {_src.get("score", 0):.2f}<br>'
-                            f'<em>{_src.get("preview", "")}</em>'
-                            f'</div>',
-                            unsafe_allow_html=True,
-                        )
+                        
+                        # Build the source card
+                        source_html = f'<div class="source-card">'
+                        source_html += f'<strong>Source {_si}:</strong> {_src_display}<br>'
+                        source_html += f'<strong>Category:</strong> {_src.get("category", "general")}<br>'
+                        source_html += f'<strong>Relevance:</strong> {_src.get("score", 0):.2f}<br>'
+                        source_html += f'<em>{_src.get("preview", "")}</em>'
+                        source_html += '</div>'
+                        
+                        st.markdown(source_html, unsafe_allow_html=True)
+                        
+                        # Add buttons if document link is available
+                        if _src.get("document_link"):
+                            doc_path = _src.get("document_link")
+                            doc_name = _src.get("file_name") or _src.get("source", "document")
+                            
+                            try:
+                                # Convert to PDF
+                                pdf_content = _convert_to_pdf(doc_path)
+                                if pdf_content:
+                                    import base64
+                                    
+                                    # Create narrow equal columns for buttons on the left side
+                                    btn_col1, btn_col2, btn_spacer = st.columns([1, 1, 4])
+                                    
+                                    pdf_filename = Path(doc_name).stem + ".pdf"
+                                    pdf_b64 = base64.b64encode(pdf_content).decode()
+                                    
+                                    # Open as PDF button - opens in new tab (no download attribute)
+                                    with btn_col1:
+                                        st.markdown(
+                                            f'<a href="data:application/pdf;base64,{pdf_b64}" target="_blank" style="display: block; padding: 0.5rem 1rem; background-color: #667eea; color: white; text-decoration: none; border-radius: 4px; font-weight: bold; font-size: 0.85rem; text-align: center; white-space: nowrap;">📄 Open</a>',
+                                            unsafe_allow_html=True
+                                        )
+                                    
+                                    # Download as PDF button
+                                    with btn_col2:
+                                        st.download_button(
+                                            label="📥 Download",
+                                            data=pdf_content,
+                                            file_name=pdf_filename,
+                                            mime="application/pdf",
+                                            key=f"doc_download_pdf_{_si}_{id(_ds_msg)}",
+                                            use_container_width=True
+                                        )
+                            except Exception as e:
+                                logger.warning(f"Could not create buttons for {doc_name}: {e}")
 
     # Chat input for document search
     _ds_input = st.chat_input("Search internal rules and policies...")
