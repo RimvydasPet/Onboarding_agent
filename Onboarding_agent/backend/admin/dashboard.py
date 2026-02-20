@@ -110,11 +110,21 @@ class AdminDashboard:
             st.session_state.admin_view_all_onboarded = True
     
     @staticmethod
-    def render_newcomers_in_progress(db: Any) -> None:
+    def render_newcomers_in_progress(db: Any, current_user_id: int = None) -> None:
         """Render newcomers currently in onboarding progress."""
-        st.markdown("### 🆕 Newcomers In Progress")
+        st.markdown("### Newcomers In Progress")
         
         newcomers = AdminQueries.get_newcomers_in_progress(db, limit=15)
+        
+        # Sort so current user appears first in the list
+        if current_user_id and newcomers:
+            current_user = [n for n in newcomers if n["user_id"] == current_user_id]
+            other_users = sorted(
+                [n for n in newcomers if n["user_id"] != current_user_id],
+                key=lambda x: x["updated_at"],
+                reverse=True
+            )
+            newcomers = current_user + other_users
         
         if newcomers:
             st.info(f"📌 {len(newcomers)} newcomer(s) currently in onboarding")

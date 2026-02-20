@@ -210,9 +210,7 @@ st.markdown("""
     .main-header {
         font-size: 2.5rem;
         font-weight: bold;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
+        color: #667eea;
         text-align: center;
         margin-bottom: 1rem;
     }
@@ -1097,7 +1095,7 @@ if _is_admin_user:
         if st.session_state.admin_view_all_onboarded:
             AdminDashboard.render_all_onboarded_users(db)
         else:
-            AdminDashboard.render_newcomers_in_progress(db)
+            AdminDashboard.render_newcomers_in_progress(db, current_user_id=st.session_state.user_id)
             AdminDashboard.render_onboarded_newcomers(db)
     
     with admin_tab2:
@@ -1765,7 +1763,7 @@ if _completed_stages_for_download:
 else:
     st.sidebar.info("Complete a stage to download your summary.")
 
-st.markdown('<div class="main-header">🤖 AI Onboarding Assistant</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-header">🎯 Onboarding Assistant</div>', unsafe_allow_html=True)
 
 st.markdown("---")
 
