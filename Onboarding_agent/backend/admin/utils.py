@@ -10,12 +10,156 @@ from reportlab.lib.units import inch
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak, Table, TableStyle
 from reportlab.lib import colors
 from datetime import datetime
+from datetime import timedelta
+from sqlalchemy.orm import Session
+from backend.database.models import UserDB, OnboardingProfileDB
 
 logger = logging.getLogger(__name__)
 
 
 class AdminUtils:
     """Utility functions for admin operations."""
+
+    MOCK_USER_PASSWORD_HASH = "$2b$12$C6UzMDM.H6dfI/f/IKxGhu6P4fBf6A7x9S6XrM4u3Q8m2fQ8hL9QK"
+
+    @staticmethod
+    def seed_mock_onboarding_users(db: Session) -> Dict[str, int]:
+        """Create/update 5 mock users with full, half, and started onboarding states."""
+        now = datetime.utcnow()
+
+        mock_users = [
+            {
+                "email": "mock.full.1@company.test",
+                "full_name": "Ava Johnson",
+                "role": "user",
+                "current_stage": "completed",
+                "completed_steps": [
+                    "welcome",
+                    "department_info",
+                    "key_responsibilities",
+                    "tools_systems",
+                    "training_needs",
+                ],
+                "facts": {
+                    "welcome.name": "Ava Johnson",
+                    "welcome.role": "Software Engineer",
+                    "welcome.department": "Engineering",
+                    "department_info.team_structure": "Platform team of 8 engineers.",
+                    "key_responsibilities.primary_focus": "Backend API development.",
+                    "tools_systems.main_tools": "GitHub, Jira, Slack, VS Code.",
+                    "training_needs.priority_area": "Internal architecture onboarding.",
+                },
+                "days_ago": 9,
+            },
+            {
+                "email": "mock.full.2@company.test",
+                "full_name": "Liam Carter",
+                "role": "user",
+                "current_stage": "completed",
+                "completed_steps": [
+                    "welcome",
+                    "department_info",
+                    "key_responsibilities",
+                    "tools_systems",
+                    "training_needs",
+                ],
+                "facts": {
+                    "welcome.name": "Liam Carter",
+                    "welcome.role": "Data Analyst",
+                    "welcome.department": "Analytics",
+                    "department_info.team_structure": "BI team with analysts and data engineers.",
+                    "key_responsibilities.primary_focus": "KPI dashboarding and reporting.",
+                    "tools_systems.main_tools": "SQL, Power BI, Python.",
+                    "training_needs.priority_area": "Data governance policies.",
+                },
+                "days_ago": 7,
+            },
+            {
+                "email": "mock.half.1@company.test",
+                "full_name": "Noah Rivera",
+                "role": "user",
+                "current_stage": "key_responsibilities",
+                "completed_steps": ["welcome", "department_info"],
+                "facts": {
+                    "welcome.name": "Noah Rivera",
+                    "welcome.role": "QA Engineer",
+                    "welcome.department": "Engineering",
+                    "department_info.team_structure": "QA pod supporting 3 product squads.",
+                },
+                "days_ago": 3,
+            },
+            {
+                "email": "mock.half.2@company.test",
+                "full_name": "Mia Patel",
+                "role": "user",
+                "current_stage": "tools_systems",
+                "completed_steps": ["welcome", "department_info", "key_responsibilities"],
+                "facts": {
+                    "welcome.name": "Mia Patel",
+                    "welcome.role": "Project Manager",
+                    "welcome.department": "Operations",
+                    "department_info.team_structure": "PMO team with cross-functional leads.",
+                    "key_responsibilities.primary_focus": "Sprint planning and delivery tracking.",
+                },
+                "days_ago": 2,
+            },
+            {
+                "email": "mock.started.1@company.test",
+                "full_name": "Ethan Brooks",
+                "role": "user",
+                "current_stage": "welcome",
+                "completed_steps": [],
+                "facts": {
+                    "welcome.name": "Ethan Brooks",
+                    "welcome.role": "IT Administrator",
+                    "welcome.department": "IT",
+                },
+                "days_ago": 1,
+            },
+        ]
+
+        created = 0
+        updated = 0
+
+        for item in mock_users:
+            user = db.query(UserDB).filter(UserDB.email == item["email"]).first()
+            if not user:
+                user = UserDB(
+                    email=item["email"],
+                    full_name=item["full_name"],
+                    hashed_password=AdminUtils.MOCK_USER_PASSWORD_HASH,
+                    is_active=True,
+                    role=item["role"],
+                    created_at=now - timedelta(days=item["days_ago"]),
+                )
+                db.add(user)
+                db.flush()
+                created += 1
+            else:
+                user.full_name = item["full_name"]
+                user.role = item["role"]
+                updated += 1
+
+            profile = db.query(OnboardingProfileDB).filter(OnboardingProfileDB.user_id == user.id).first()
+            if not profile:
+                profile = OnboardingProfileDB(
+                    user_id=user.id,
+                    current_stage=item["current_stage"],
+                    preferences={"seeded": True},
+                    progress={"facts": item["facts"], "seeded": True},
+                    completed_steps=item["completed_steps"],
+                    updated_at=now - timedelta(days=item["days_ago"]),
+                )
+                db.add(profile)
+            else:
+                profile.current_stage = item["current_stage"]
+                profile.preferences = {**(profile.preferences or {}), "seeded": True}
+                profile.progress = {**(profile.progress or {}), "facts": item["facts"], "seeded": True}
+                profile.completed_steps = item["completed_steps"]
+                profile.updated_at = now - timedelta(days=item["days_ago"])
+
+        db.commit()
+        return {"created": created, "updated": updated, "total": len(mock_users)}
     
     @staticmethod
     def format_date(date_obj) -> str:

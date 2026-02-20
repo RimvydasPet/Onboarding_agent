@@ -64,6 +64,13 @@ class AdminDashboard:
     def render_onboarded_newcomers(db: Any) -> None:
         """Render onboarded newcomers section."""
         st.markdown("### 👥 Onboarded Newcomers")
+
+        if st.button("🧪 Seed 5 Mock Users", use_container_width=True, key="seed_mock_users"):
+            result = AdminUtils.seed_mock_onboarding_users(db)
+            st.success(
+                f"Mock users ready: total={result['total']} (created={result['created']}, updated={result['updated']})"
+            )
+            st.rerun()
         
         stats = AdminQueries.get_onboarding_stats(db)
         
