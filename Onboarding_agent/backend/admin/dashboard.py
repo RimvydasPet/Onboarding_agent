@@ -264,22 +264,7 @@ class AdminDashboard:
         with tab1:
             st.markdown("#### Upload New Documents")
             
-            col1, col2 = st.columns(2)
-            with col1:
-                upload_category = st.text_input(
-                    "Category",
-                    value="company_docs",
-                    help="e.g., policies, procedures, guidelines",
-                    key="admin_upload_category",
-                )
-            
-            with col2:
-                upload_stage = st.selectbox(
-                    "Stage (optional)",
-                    options=["", "welcome", "department_info", "key_responsibilities", "tools_systems", "training_needs"],
-                    key="admin_upload_stage",
-                    help="Assign to specific onboarding stage",
-                )
+            ingest_clicked = st.button("📤 Ingest Documents", use_container_width=True, key="admin_ingest_files")
             
             uploaded_files = st.file_uploader(
                 "Upload .md, .pdf, or .txt files",
@@ -288,7 +273,11 @@ class AdminDashboard:
                 key="admin_upload_files",
             )
             
-            if st.button("📤 Ingest Documents", use_container_width=True, key="admin_ingest_files"):
+            # Use default values for category and stage
+            upload_category = "company_docs"
+            upload_stage = ""
+            
+            if ingest_clicked:
                 if not uploaded_files:
                     st.warning("No files selected")
                 else:

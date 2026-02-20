@@ -1121,6 +1121,7 @@ if _is_admin_user:
             key_len = len(str(getattr(settings, "TAVILY_API_KEY", "") or "").strip())
             st.info(f"🔍 **Web Search:** {provider.upper()}")
             st.caption(f"API Key configured: {'✅ Yes' if key_len > 0 else '❌ No'}")
+        
     
     st.stop()
 

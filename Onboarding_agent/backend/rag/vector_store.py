@@ -132,7 +132,9 @@ class VectorStore:
         for meta in metadatas:
             if not isinstance(meta, dict):
                 continue
-            if meta.get("origin") != "upload":
+            # Include both "upload" and "admin_upload" origins
+            origin = meta.get("origin") or ""
+            if origin not in ("upload", "admin_upload"):
                 continue
             upload_id = str(meta.get("upload_id") or "")
             if not upload_id:
@@ -144,6 +146,7 @@ class VectorStore:
                     "category": meta.get("category") or "uploaded",
                     "stage": meta.get("stage") or "",
                     "chunks": 0,
+                    "metadata": {"origin": origin},
                 }
             grouped[upload_id]["chunks"] += 1
 
