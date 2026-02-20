@@ -179,6 +179,25 @@ def _convert_to_pdf(file_path: str) -> bytes:
         return b""
 
 
+def _path_from_file_url(url: str) -> Path:
+    """Convert file:// URL to local Path with Windows drive handling."""
+    from urllib.parse import urlparse, unquote
+
+    parsed = urlparse(str(url))
+    if parsed.scheme != "file":
+        return Path(str(url))
+
+    raw_path = unquote(parsed.path or "")
+    if parsed.netloc:
+        raw_path = f"//{parsed.netloc}{raw_path}"
+
+    # Windows file URI may come as /C:/path; strip leading slash for valid drive path.
+    if len(raw_path) >= 3 and raw_path[0] == "/" and raw_path[2] == ":":
+        raw_path = raw_path[1:]
+
+    return Path(raw_path)
+
+
 st.set_page_config(
     page_title="Onboarding Assistant with RAG",
     page_icon="🤖",
@@ -1242,7 +1261,29 @@ if _onboarding_complete:
                         if links_data.get('urls'):
                             st.markdown("**📎 Links:**")
                             for url in set(links_data['urls']):
-                                st.markdown(f"- [🔗 Open Link]({url})")
+                                from urllib.parse import urlparse
+                                parsed_url = urlparse(str(url))
+
+                                if parsed_url.scheme == "file":
+                                    source_path = _path_from_file_url(url)
+                                    try:
+                                        pdf_content = _convert_to_pdf(str(source_path))
+                                    except Exception:
+                                        pdf_content = b""
+
+                                    if pdf_content:
+                                        import base64
+                                        pdf_b64 = base64.b64encode(pdf_content).decode()
+                                        safe_label = f"{source_path.stem}.pdf" if source_path.stem else "resource.pdf"
+                                        st.markdown(
+                                            f'- <a href="data:application/pdf;base64,{pdf_b64}" target="_blank">🔗 Open {safe_label}</a>',
+                                            unsafe_allow_html=True,
+                                        )
+                                    else:
+                                        fallback_label = source_path.name or "resource"
+                                        st.markdown(f"- 📄 {fallback_label}")
+                                else:
+                                    st.markdown(f"- [🔗 Open Link]({url})")
                         
                         if links_data.get('docs'):
                             st.markdown("**📄 Documents:**")

@@ -373,6 +373,12 @@ class AdminUtils:
             completed_steps = onboarding_data.get("completed_steps", []) or []
             progress = onboarding_data.get("progress", {}) or {}
 
+            def sanitize_report_text(text: str) -> str:
+                """Remove raw URLs/URIs from visible report text."""
+                cleaned = re.sub(r'(?:https?|file)://[^\s\)]+', '', str(text or ''))
+                cleaned = re.sub(r'\s{2,}', ' ', cleaned)
+                return cleaned.strip()
+
             def extract_stage_summary(stage_key: str) -> str:
                 """Extract readable 2-3 sentence summary of newcomer answers only."""
                 answers = []
@@ -381,7 +387,7 @@ class AdminUtils:
                     answer = facts.get(field_key)
                     if not answer:
                         continue
-                    answer_str = str(answer).strip()
+                    answer_str = sanitize_report_text(answer)
                     if answer_str.lower() in ("yes", "no", "move on", "none", ""):
                         continue
                     answers.append(answer_str)
@@ -397,11 +403,11 @@ class AdminUtils:
                     if name and role_val and dept:
                         parts.append(f"{name} is joining as {role_val} in the {dept} department.")
                     if phone:
-                        parts.append(f"Contact: {phone}.")
+                        parts.append(f"Contact: {sanitize_report_text(phone)}.")
                     if pronouns and pronouns.lower() != "none":
-                        parts.append(f"Pronouns: {pronouns}.")
-                    return " ".join(parts)
-                return " ".join(answers[:3])
+                        parts.append(f"Pronouns: {sanitize_report_text(pronouns)}.")
+                    return sanitize_report_text(" ".join(parts))
+                return sanitize_report_text(" ".join(answers[:3]))
 
             def extract_document_links_from_facts() -> Dict[str, Dict[str, List[str]]]:
                 links_by_stage: Dict[str, Dict[str, List[str]]] = {}
@@ -424,7 +430,12 @@ class AdminUtils:
                         links_by_stage[stage] = {"urls": [], "docs": []}
 
                     links_by_stage[stage]["urls"].extend(urls)
-                    links_by_stage[stage]["docs"].extend([d.strip() for d in doc_refs if d.strip()])
+                    cleaned_doc_refs: List[str] = []
+                    for doc_ref in doc_refs:
+                        cleaned_label = re.sub(r'(?:https?|file)://[^\s\)]+', '', str(doc_ref)).strip(' -:;,.')
+                        if cleaned_label:
+                            cleaned_doc_refs.append(cleaned_label)
+                    links_by_stage[stage]["docs"].extend(cleaned_doc_refs)
 
                 return links_by_stage
 
@@ -435,8 +446,66 @@ class AdminUtils:
                 parsed = urlparse(str(url))
                 if parsed.scheme == "file":
                     file_name = Path(unquote(parsed.path)).name
-                    return file_name or "Open document"
+                    if not file_name:
+                        return "Open document"
+                    file_path = Path(file_name)
+                    if file_path.suffix.lower() != ".pdf":
+                        return f"{file_path.stem}.pdf"
+                    return file_name
                 return str(url)
+
+            def pdf_href_for_url(url: str) -> str:
+                """Prefer PDF targets for local files so links open as documents."""
+                from html import escape
+                from urllib.parse import urlparse, unquote
+
+                parsed = urlparse(str(url))
+                if parsed.scheme != "file":
+                    return str(url)
+
+                source_path = Path(unquote(parsed.path))
+                if not source_path.exists():
+                    return str(url)
+
+                if source_path.suffix.lower() == ".pdf":
+                    return source_path.resolve().as_uri()
+
+                if source_path.suffix.lower() not in {".md", ".markdown", ".txt"}:
+                    return str(url)
+
+                try:
+                    content = source_path.read_text(encoding="utf-8", errors="replace")
+                    if not content.strip():
+                        return str(url)
+
+                    cache_dir = Path(__file__).resolve().parent / "generated_resource_pdfs"
+                    cache_dir.mkdir(parents=True, exist_ok=True)
+                    target_pdf = cache_dir / f"{source_path.stem}.pdf"
+
+                    text_lines = [escape(line) for line in content.splitlines()]
+                    text_html = "<br/>".join(text_lines) or "(Empty document)"
+
+                    temp_buffer = BytesIO()
+                    temp_doc = SimpleDocTemplate(
+                        temp_buffer,
+                        pagesize=A4,
+                        rightMargin=0.75 * inch,
+                        leftMargin=0.75 * inch,
+                        topMargin=0.75 * inch,
+                        bottomMargin=0.75 * inch,
+                    )
+                    temp_story = [
+                        Paragraph(source_path.name, styles['Heading2']),
+                        Spacer(1, 0.08 * inch),
+                        Paragraph(text_html, normal_style),
+                    ]
+                    temp_doc.build(temp_story)
+                    temp_buffer.seek(0)
+                    target_pdf.write_bytes(temp_buffer.read())
+                    return target_pdf.resolve().as_uri()
+                except Exception as conversion_error:
+                    logger.warning(f"Could not convert link target to PDF for {source_path}: {conversion_error}")
+                    return str(url)
 
             # ── Title ──────────────────────────────────────────────
             full_name = onboarding_data.get("full_name") or facts.get("welcome.name", "N/A")
@@ -531,7 +600,7 @@ class AdminUtils:
                     story.append(Paragraph(stage_label, styles['Heading4']))
 
                     for url in urls:
-                        safe_url = url.replace("&", "&amp;")
+                        safe_url = pdf_href_for_url(url).replace("&", "&amp;")
                         link_text = link_label(url).replace("&", "&amp;")
                         story.append(
                             Paragraph(
