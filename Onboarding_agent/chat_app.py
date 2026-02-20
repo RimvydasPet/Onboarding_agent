@@ -1026,13 +1026,29 @@ def _generate_user_onboarding_pdf(user_id: int, session_id: str, facts: dict) ->
                 
                 story.append(Paragraph(f"<b>{stage_title}</b>", body_style))
                 
+                # Collect document names from URLs to avoid duplicates
+                shown_doc_names = set()
+                
+                def _is_similar_doc_name_pdf(doc_name: str, shown_names: set) -> bool:
+                    """Check if doc_name is similar to any shown name using word overlap."""
+                    doc_words = set(doc_name.lower().replace('_', ' ').replace('-', ' ').split())
+                    for shown in shown_names:
+                        shown_words = set(shown.split())
+                        common_words = doc_words & shown_words
+                        if len(common_words) >= min(2, len(doc_words), len(shown_words)):
+                            return True
+                    return False
+                
                 for url in set(links_data['urls']):
                     safe_url = _pdf_href_for_url(url).replace("&", "&amp;")
                     link_text = _link_label(url).replace("&", "&amp;")
-                    story.append(Paragraph(f'<link href="{safe_url}" color="blue"><u>{link_text}</u></link>', body_style))
+                    shown_doc_names.add(link_text.lower().replace('_', ' ').replace('-', ' ').replace('.pdf', '').replace('.md', ''))
+                    story.append(Paragraph(f'• <link href="{safe_url}" color="blue"><u>{link_text}</u></link>', body_style))
                 
+                # Filter out plain text docs that match URL document names
                 for doc_ref in set(links_data['docs']):
-                    story.append(Paragraph(f"• {doc_ref.strip()}", body_style))
+                    if not _is_similar_doc_name_pdf(doc_ref.strip(), shown_doc_names):
+                        story.append(Paragraph(f"• {doc_ref.strip()}", body_style))
                 
                 story.append(Spacer(1, 0.15*inch))
     
@@ -1256,39 +1272,64 @@ if _onboarding_complete:
                         'training_needs': '📚 Training Needs'
                     }.get(stage, stage.replace('_', ' ').title())
                     
-                    resource_count = len(set(links_data.get('urls', []) + links_data.get('docs', [])))
+                    # Collect document names from URLs to avoid duplicates
+                    shown_doc_names = set()
+                    
+                    # Process URLs (file:// links to internal documents)
+                    url_docs = []
+                    if links_data.get('urls'):
+                        for url in set(links_data['urls']):
+                            from urllib.parse import urlparse
+                            parsed_url = urlparse(str(url))
+
+                            if parsed_url.scheme == "file":
+                                source_path = _path_from_file_url(url)
+                                doc_name = source_path.stem if source_path.stem else "Document"
+                                shown_doc_names.add(doc_name.lower().replace('_', ' ').replace('-', ' '))
+                                try:
+                                    pdf_content = _convert_to_pdf(str(source_path))
+                                except Exception:
+                                    pdf_content = b""
+                                url_docs.append((doc_name, pdf_content))
+                    
+                    # Filter out plain text docs that match URL document names
+                    def _is_similar_doc_name(doc_name: str, shown_names: set) -> bool:
+                        """Check if doc_name is similar to any shown name using word overlap."""
+                        doc_words = set(doc_name.lower().replace('_', ' ').replace('-', ' ').split())
+                        for shown in shown_names:
+                            shown_words = set(shown.split())
+                            # If most words overlap, consider it a match
+                            common_words = doc_words & shown_words
+                            if len(common_words) >= min(2, len(doc_words), len(shown_words)):
+                                return True
+                        return False
+                    
+                    plain_docs = []
+                    if links_data.get('docs'):
+                        for doc in set(links_data['docs']):
+                            # Skip if this doc name is similar to one we already have from URLs
+                            if not _is_similar_doc_name(doc.strip(), shown_doc_names):
+                                plain_docs.append(doc.strip())
+                    
+                    resource_count = len(url_docs) + len(plain_docs)
                     with st.expander(f"{stage_title} ({resource_count} resources)", expanded=False):
-                        if links_data.get('urls'):
-                            st.markdown("**📎 Links:**")
-                            for url in set(links_data['urls']):
-                                from urllib.parse import urlparse
-                                parsed_url = urlparse(str(url))
-
-                                if parsed_url.scheme == "file":
-                                    source_path = _path_from_file_url(url)
-                                    try:
-                                        pdf_content = _convert_to_pdf(str(source_path))
-                                    except Exception:
-                                        pdf_content = b""
-
-                                    if pdf_content:
-                                        import base64
-                                        pdf_b64 = base64.b64encode(pdf_content).decode()
-                                        safe_label = f"{source_path.stem}.pdf" if source_path.stem else "resource.pdf"
-                                        st.markdown(
-                                            f'- <a href="data:application/pdf;base64,{pdf_b64}" target="_blank">🔗 Open {safe_label}</a>',
-                                            unsafe_allow_html=True,
-                                        )
-                                    else:
-                                        fallback_label = source_path.name or "resource"
-                                        st.markdown(f"- 📄 {fallback_label}")
-                                else:
-                                    st.markdown(f"- [🔗 Open Link]({url})")
+                        st.markdown("**📄 Documents:**")
                         
-                        if links_data.get('docs'):
-                            st.markdown("**📄 Documents:**")
-                            for doc in set(links_data['docs']):
-                                st.markdown(f"- {doc.strip()}")
+                        # Show URL-based documents with clickable links
+                        for doc_name, pdf_content in url_docs:
+                            if pdf_content:
+                                import base64
+                                pdf_b64 = base64.b64encode(pdf_content).decode()
+                                st.markdown(
+                                    f'- <a href="data:application/pdf;base64,{pdf_b64}" target="_blank" style="color: #667eea; text-decoration: underline;">{doc_name}</a>',
+                                    unsafe_allow_html=True,
+                                )
+                            else:
+                                st.markdown(f"- {doc_name}")
+                        
+                        # Show remaining plain text document references
+                        for doc in plain_docs:
+                            st.markdown(f"- {doc}")
             st.markdown("---")
         else:
             st.info("📚 No specific resources were mentioned during your onboarding. Use the search box below to find company policies and procedures.")
@@ -1312,56 +1353,27 @@ if _onboarding_complete:
             )
             if _ds_msg.get("sources"):
                 _shown_sources = _ds_msg["sources"][:3]
-                with st.expander(f"📚 Resources ({len(_shown_sources)})"):
+                with st.expander(f"📚 Sources ({len(_shown_sources)})"):
                     for _si, _src in enumerate(_shown_sources, 1):
                         _src_display = _src.get("file_name") or _src.get("source", "unknown")
+                        doc_path = _src.get("document_link")
                         
-                        # Build the source card
-                        source_html = f'<div class="source-card">'
-                        source_html += f'<strong>Source {_si}:</strong> {_src_display}<br>'
-                        source_html += f'<strong>Category:</strong> {_src.get("category", "general")}<br>'
-                        source_html += f'<strong>Relevance:</strong> {_src.get("score", 0):.2f}<br>'
-                        source_html += f'<em>{_src.get("preview", "")}</em>'
-                        source_html += '</div>'
-                        
-                        st.markdown(source_html, unsafe_allow_html=True)
-                        
-                        # Add buttons if document link is available
-                        if _src.get("document_link"):
-                            doc_path = _src.get("document_link")
-                            doc_name = _src.get("file_name") or _src.get("source", "document")
-                            
+                        # Try to generate PDF link for clickable document name
+                        pdf_link_html = _src_display  # Default: plain text
+                        pdf_content = None
+                        if doc_path:
                             try:
-                                # Convert to PDF
                                 pdf_content = _convert_to_pdf(doc_path)
                                 if pdf_content:
                                     import base64
-                                    
-                                    # Create narrow equal columns for buttons on the left side
-                                    btn_col1, btn_col2, btn_spacer = st.columns([1, 1, 4])
-                                    
-                                    pdf_filename = Path(doc_name).stem + ".pdf"
                                     pdf_b64 = base64.b64encode(pdf_content).decode()
-                                    
-                                    # Open as PDF button - opens in new tab (no download attribute)
-                                    with btn_col1:
-                                        st.markdown(
-                                            f'<a href="data:application/pdf;base64,{pdf_b64}" target="_blank" style="display: block; padding: 0.5rem 1rem; background-color: #667eea; color: white; text-decoration: none; border-radius: 4px; font-weight: bold; font-size: 0.85rem; text-align: center; white-space: nowrap;">📄 Open</a>',
-                                            unsafe_allow_html=True
-                                        )
-                                    
-                                    # Download as PDF button
-                                    with btn_col2:
-                                        st.download_button(
-                                            label="📥 Download",
-                                            data=pdf_content,
-                                            file_name=pdf_filename,
-                                            mime="application/pdf",
-                                            key=f"doc_download_pdf_{_si}_{id(_ds_msg)}",
-                                            use_container_width=True
-                                        )
+                                    pdf_link_html = f'<a href="data:application/pdf;base64,{pdf_b64}" target="_blank" style="color: #667eea; text-decoration: underline; cursor: pointer;">{_src_display}</a>'
                             except Exception as e:
-                                logger.warning(f"Could not create buttons for {doc_name}: {e}")
+                                logger.warning(f"Could not create PDF link for {_src_display}: {e}")
+                        
+                        # Build simple document link format
+                        source_html = f'<div class="source-card"><strong>Document:</strong> {pdf_link_html}</div>'
+                        st.markdown(source_html, unsafe_allow_html=True)
 
     # Chat input for document search
     _ds_input = st.chat_input("Search internal rules and policies...")
@@ -1892,30 +1904,24 @@ for message in current_stage_messages:
             with st.expander(f"📚 Sources ({len(_shown_sources)})"):
                 for i, source in enumerate(_shown_sources, 1):
                     _src_file_name = source.get('file_name', '')
-                    _src_upload_id = source.get('upload_id', '')
                     _src_display_name = _src_file_name or source.get('source', 'unknown')
-
-                    st.markdown(f"""
-                    <div class="source-card">
-                        <strong>Source {i}:</strong> {_src_display_name}<br>
-                        <strong>Category:</strong> {source.get('category', 'general')}<br>
-                        <strong>Relevance:</strong> {source.get('score', 0):.2f}<br>
-                        <em>{source.get('preview', '')}</em>
-                    </div>
-                    """, unsafe_allow_html=True)
-
-                    if _src_file_name and _src_upload_id:
-                        with st.expander(f"📄 View full document: {_src_file_name}"):
-                            _upload_root = Path(__file__).resolve().parent / "uploaded_docs"
-                            _found_files = list(_upload_root.glob(f"{_src_upload_id}_*")) if _upload_root.exists() else []
-                            if _found_files:
-                                try:
-                                    _doc_text = _found_files[0].read_text(encoding="utf-8", errors="replace")
-                                    st.markdown(_doc_text)
-                                except Exception as _read_err:
-                                    st.error(f"Could not read file: {_read_err}")
-                            else:
-                                st.warning(f"Raw file not found for upload ID: {_src_upload_id}")
+                    doc_path = source.get('document_link')
+                    
+                    # Try to generate PDF link for clickable document name
+                    pdf_link_html = _src_display_name  # Default: plain text
+                    if doc_path:
+                        try:
+                            pdf_content = _convert_to_pdf(doc_path)
+                            if pdf_content:
+                                import base64
+                                pdf_b64 = base64.b64encode(pdf_content).decode()
+                                pdf_link_html = f'<a href="data:application/pdf;base64,{pdf_b64}" target="_blank" style="color: #667eea; text-decoration: underline; cursor: pointer;">{_src_display_name}</a>'
+                        except Exception as e:
+                            logger.warning(f"Could not create PDF link for {_src_display_name}: {e}")
+                    
+                    # Build simple document link format
+                    source_html = f'<div class="source-card"><strong>Document:</strong> {pdf_link_html}</div>'
+                    st.markdown(source_html, unsafe_allow_html=True)
 
 
 user_input = None

@@ -200,10 +200,10 @@ class AdminDashboard:
                     st.warning(f"PDF error: {err}")
 
             # Header row
-            h1, h2, h3, h4, h5, h6, h7, h8, h9 = st.columns([1.8, 2, 1.3, 1, 1.1, 1.1, 1.1, 1.1, 1])
+            h1, h2, h3, h4, h5, h6, h7, h8 = st.columns([1.8, 2, 1.3, 1, 1.1, 1.1, 1.1, 1.1])
             for col, label in zip(
-                [h1, h2, h3, h4, h5, h6, h7, h8, h9],
-                ["Name", "Email", "Role", "Dept", "First Day", "Completed", "Download", "View", "Reset"]
+                [h1, h2, h3, h4, h5, h6, h7, h8],
+                ["Name", "Email", "Role", "Dept", "First Day", "Completed", "Download", "View"]
             ):
                 col.markdown(f"**{label}**")
             st.markdown('<hr style="margin:4px 0 8px 0"/>', unsafe_allow_html=True)
@@ -212,9 +212,15 @@ class AdminDashboard:
             for idx, user in enumerate(all_users):
                 pdf_data = user_pdfs.get(user["user_id"])
                 first_day = user["created_at"].strftime("%Y-%m-%d") if user["created_at"] else "N/A"
-                completed_date = user["completed_at"].strftime("%Y-%m-%d") if user["completed_at"] else "N/A"
+                
+                # Show "In Progress" if user hasn't completed onboarding
+                current_stage = user.get("current_stage", "")
+                if current_stage == "completed":
+                    completed_date = user["completed_at"].strftime("%Y-%m-%d") if user["completed_at"] else "N/A"
+                else:
+                    completed_date = "In Progress"
 
-                c1, c2, c3, c4, c5, c6, c7, c8, c9 = st.columns([1.8, 2, 1.3, 1, 1.1, 1.1, 1.1, 1.1, 1])
+                c1, c2, c3, c4, c5, c6, c7, c8 = st.columns([1.8, 2, 1.3, 1, 1.1, 1.1, 1.1, 1.1])
                 c1.write(user["name"])
                 c2.write(user["email"])
                 c3.write(user["role"])
@@ -239,28 +245,6 @@ class AdminDashboard:
                             f'text-decoration:none;border-radius:4px;text-align:center;font-size:0.85rem;font-weight:bold;">👁️</a>',
                             unsafe_allow_html=True,
                         )
-                with c9:
-                    if st.button("🔄", key=f"reset_all_{idx}", use_container_width=True):
-                        st.session_state[f"confirm_reset_all_{user['user_id']}"] = True
-                
-                # Confirmation dialog for reset
-                if st.session_state.get(f"confirm_reset_all_{user['user_id']}", False):
-                    with st.container():
-                        st.warning(f"⚠️ Reset onboarding for **{user['name']}** ({user['email']})? This clears all progress and starts fresh.")
-                        col_yes, col_no = st.columns(2)
-                        with col_yes:
-                            if st.button("✅ Yes, Reset", key=f"confirm_yes_all_{user['user_id']}", use_container_width=True):
-                                result = AdminQueries.reset_user_onboarding(user["user_id"], db)
-                                if result["success"]:
-                                    st.success(f"✅ Onboarding reset for {result['user_email']}")
-                                    del st.session_state[f"confirm_reset_all_{user['user_id']}"]
-                                    st.rerun()
-                                else:
-                                    st.error(f"❌ Reset failed: {result.get('error', 'Unknown error')}")
-                        with col_no:
-                            if st.button("❌ Cancel", key=f"confirm_no_all_{user['user_id']}", use_container_width=True):
-                                del st.session_state[f"confirm_reset_all_{user['user_id']}"]
-                                st.rerun()
         else:
             st.info("No onboarded users yet.")
         

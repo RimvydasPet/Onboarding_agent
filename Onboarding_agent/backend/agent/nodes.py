@@ -927,11 +927,26 @@ Rules:
                 # Expose sources so the UI can show them with clickable links
                 sources = []
                 for doc in relevant_docs:
+                    # Strip YAML frontmatter from preview
+                    content = doc.page_content
+                    if content.startswith("doc_id:") or content.startswith("---"):
+                        # Find where actual content starts (after metadata lines)
+                        lines = content.split("\n")
+                        content_start = 0
+                        for idx, line in enumerate(lines):
+                            # Skip metadata lines (key: value format or empty)
+                            stripped = line.strip()
+                            if stripped and not ":" in stripped[:30]:
+                                content_start = idx
+                                break
+                        content = "\n".join(lines[content_start:]).strip()
+                    preview_text = content[:150] + "..." if len(content) > 150 else content
+                    
                     source_info = {
                         "source": doc.metadata.get("source", "unknown"),
                         "category": doc.metadata.get("category", "general"),
                         "score": doc.metadata.get("score", 0.0),
-                        "preview": doc.page_content[:150] + "...",
+                        "preview": preview_text,
                         "file_name": doc.metadata.get("file_name", ""),
                         "upload_id": doc.metadata.get("upload_id", ""),
                     }

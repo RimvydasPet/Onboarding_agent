@@ -599,9 +599,23 @@ class AdminUtils:
 
                     story.append(Paragraph(stage_label, styles['Heading4']))
 
+                    # Collect document names from URLs to avoid duplicates
+                    shown_doc_names = set()
+                    
+                    def _is_similar_doc_name(doc_name_check: str, shown_names: set) -> bool:
+                        """Check if doc_name is similar to any shown name using word overlap."""
+                        doc_words = set(doc_name_check.lower().replace('_', ' ').replace('-', ' ').split())
+                        for shown in shown_names:
+                            shown_words = set(shown.split())
+                            common_words = doc_words & shown_words
+                            if len(common_words) >= min(2, len(doc_words), len(shown_words)):
+                                return True
+                        return False
+                    
                     for url in urls:
                         safe_url = pdf_href_for_url(url).replace("&", "&amp;")
                         link_text = link_label(url).replace("&", "&amp;")
+                        shown_doc_names.add(link_text.lower().replace('_', ' ').replace('-', ' ').replace('.pdf', '').replace('.md', ''))
                         story.append(
                             Paragraph(
                                 f'• <link href="{safe_url}" color="blue"><u>{link_text}</u></link>',
@@ -609,8 +623,10 @@ class AdminUtils:
                             )
                         )
 
+                    # Filter out plain text docs that match URL document names
                     for doc_name in docs:
-                        story.append(Paragraph(f"• {doc_name}", normal_style))
+                        if not _is_similar_doc_name(doc_name, shown_doc_names):
+                            story.append(Paragraph(f"• {doc_name}", normal_style))
 
                     story.append(Spacer(1, 0.04*inch))
 

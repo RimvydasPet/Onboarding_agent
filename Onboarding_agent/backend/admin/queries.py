@@ -44,6 +44,7 @@ class AdminQueries:
                     "department": facts.get("welcome.department", "N/A"),
                     "completed_at": profile.updated_at,
                     "created_at": user.created_at,
+                    "current_stage": profile.current_stage,
                 })
             else:
                 result.append({
@@ -54,6 +55,7 @@ class AdminQueries:
                     "department": facts.get("welcome.department", "N/A"),
                     "completed_at": profile.updated_at,
                     "created_at": profile.updated_at,
+                    "current_stage": profile.current_stage,
                 })
         
         return sorted(result, key=lambda x: x["completed_at"] or x["created_at"], reverse=True)
@@ -106,8 +108,10 @@ class AdminQueries:
     
     @staticmethod
     def get_recent_onboarded_users(db: Session, limit: int = 10) -> List[Dict[str, Any]]:
-        """Get recently active onboarding users."""
-        profiles = db.query(OnboardingProfileDB).order_by(OnboardingProfileDB.updated_at.desc()).limit(limit).all()
+        """Get users who have completed onboarding, ordered by most recent."""
+        profiles = db.query(OnboardingProfileDB).filter(
+            OnboardingProfileDB.current_stage == "completed"
+        ).order_by(OnboardingProfileDB.updated_at.desc()).limit(limit).all()
         
         result = []
         for profile in profiles:
