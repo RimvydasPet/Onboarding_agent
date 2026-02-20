@@ -1888,8 +1888,9 @@ for message in current_stage_messages:
         st.markdown(f'<div class="chat-message assistant-message"><strong>🤖 Assistant:</strong><br>{content}</div>', unsafe_allow_html=True)
 
         if st.session_state.show_sources and "sources" in message and message["sources"]:
-            with st.expander(f"📚 Sources ({len(message['sources'])})"):
-                for i, source in enumerate(message["sources"], 1):
+            _shown_sources = message["sources"][:3]
+            with st.expander(f"📚 Sources ({len(_shown_sources)})"):
+                for i, source in enumerate(_shown_sources, 1):
                     _src_file_name = source.get('file_name', '')
                     _src_upload_id = source.get('upload_id', '')
                     _src_display_name = _src_file_name or source.get('source', 'unknown')

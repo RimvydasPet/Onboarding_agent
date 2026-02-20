@@ -119,18 +119,46 @@ class AdminDashboard:
         if newcomers:
             st.info(f"📌 {len(newcomers)} newcomer(s) currently in onboarding")
             
-            table_data = []
-            for user in newcomers:
-                table_data.append({
-                    "Name": user["name"],
-                    "Email": user["email"],
-                    "Role": user["role"],
-                    "Department": user["department"],
-                    "Current Stage": user["current_stage"],
-                    "Last Updated": AdminUtils.format_date(user["updated_at"]),
-                })
+            # Header row
+            h1, h2, h3, h4, h5, h6, h7 = st.columns([2, 2.5, 1.5, 1.5, 1.5, 1.5, 1.2])
+            for col, label in zip(
+                [h1, h2, h3, h4, h5, h6, h7],
+                ["Name", "Email", "Role", "Dept", "Stage", "Updated", "Actions"]
+            ):
+                col.markdown(f"**{label}**")
+            st.markdown('<hr style="margin:4px 0 8px 0"/>', unsafe_allow_html=True)
             
-            st.dataframe(table_data, use_container_width=True, hide_index=True)
+            # One row per user with reset button
+            for idx, user in enumerate(newcomers):
+                c1, c2, c3, c4, c5, c6, c7 = st.columns([2, 2.5, 1.5, 1.5, 1.5, 1.5, 1.2])
+                c1.write(user["name"])
+                c2.write(user["email"])
+                c3.write(user["role"])
+                c4.write(user["department"])
+                c5.write(user["current_stage"].replace("_", " ").title())
+                c6.write(AdminUtils.format_date(user["updated_at"]))
+                with c7:
+                    if st.button("🔄 Reset", key=f"reset_inprog_{idx}", use_container_width=True):
+                        st.session_state[f"confirm_reset_{user['user_id']}"] = True
+                
+                # Confirmation dialog
+                if st.session_state.get(f"confirm_reset_{user['user_id']}", False):
+                    with st.container():
+                        st.warning(f"⚠️ Are you sure you want to reset onboarding for **{user['name']}** ({user['email']})? This will clear all progress and conversation history.")
+                        col_yes, col_no = st.columns(2)
+                        with col_yes:
+                            if st.button("✅ Yes, Reset", key=f"confirm_yes_{user['user_id']}", use_container_width=True):
+                                result = AdminQueries.reset_user_onboarding(user["user_id"], db)
+                                if result["success"]:
+                                    st.success(f"✅ Onboarding reset for {result['user_email']}. Cleared {result['deleted_memories']} memories, {result['deleted_conversations']} conversations.")
+                                    del st.session_state[f"confirm_reset_{user['user_id']}"]
+                                    st.rerun()
+                                else:
+                                    st.error(f"❌ Reset failed: {result.get('error', 'Unknown error')}")
+                        with col_no:
+                            if st.button("❌ Cancel", key=f"confirm_no_{user['user_id']}", use_container_width=True):
+                                del st.session_state[f"confirm_reset_{user['user_id']}"]
+                                st.rerun()
         else:
             st.success("✅ No newcomers in progress - all users have completed onboarding!")
         
@@ -172,10 +200,10 @@ class AdminDashboard:
                     st.warning(f"PDF error: {err}")
 
             # Header row
-            h1, h2, h3, h4, h5, h6, h7, h8 = st.columns([2, 2, 1.5, 1, 1.2, 1.2, 1.3, 1.3])
+            h1, h2, h3, h4, h5, h6, h7, h8, h9 = st.columns([1.8, 2, 1.3, 1, 1.1, 1.1, 1.1, 1.1, 1])
             for col, label in zip(
-                [h1, h2, h3, h4, h5, h6, h7, h8],
-                ["Name", "Email", "Role", "Dept", "First Day", "Completed", "Download", "View"]
+                [h1, h2, h3, h4, h5, h6, h7, h8, h9],
+                ["Name", "Email", "Role", "Dept", "First Day", "Completed", "Download", "View", "Reset"]
             ):
                 col.markdown(f"**{label}**")
             st.markdown('<hr style="margin:4px 0 8px 0"/>', unsafe_allow_html=True)
@@ -186,7 +214,7 @@ class AdminDashboard:
                 first_day = user["created_at"].strftime("%Y-%m-%d") if user["created_at"] else "N/A"
                 completed_date = user["completed_at"].strftime("%Y-%m-%d") if user["completed_at"] else "N/A"
 
-                c1, c2, c3, c4, c5, c6, c7, c8 = st.columns([2, 2, 1.5, 1, 1.2, 1.2, 1.3, 1.3])
+                c1, c2, c3, c4, c5, c6, c7, c8, c9 = st.columns([1.8, 2, 1.3, 1, 1.1, 1.1, 1.1, 1.1, 1])
                 c1.write(user["name"])
                 c2.write(user["email"])
                 c3.write(user["role"])
@@ -196,7 +224,7 @@ class AdminDashboard:
                 with c7:
                     if pdf_data:
                         st.download_button(
-                            label="📥 Download",
+                            label="📥",
                             data=pdf_data["bytes"],
                             file_name=f"{user['email']}_onboarding.pdf",
                             mime="application/pdf",
@@ -208,9 +236,31 @@ class AdminDashboard:
                         st.markdown(
                             f'<a href="data:application/pdf;base64,{pdf_data["b64"]}" target="_blank" '
                             f'style="display:block;padding:6px 8px;background:#667eea;color:white;'
-                            f'text-decoration:none;border-radius:4px;text-align:center;font-size:0.85rem;font-weight:bold;">👁️ View</a>',
+                            f'text-decoration:none;border-radius:4px;text-align:center;font-size:0.85rem;font-weight:bold;">👁️</a>',
                             unsafe_allow_html=True,
                         )
+                with c9:
+                    if st.button("🔄", key=f"reset_all_{idx}", use_container_width=True):
+                        st.session_state[f"confirm_reset_all_{user['user_id']}"] = True
+                
+                # Confirmation dialog for reset
+                if st.session_state.get(f"confirm_reset_all_{user['user_id']}", False):
+                    with st.container():
+                        st.warning(f"⚠️ Reset onboarding for **{user['name']}** ({user['email']})? This clears all progress and starts fresh.")
+                        col_yes, col_no = st.columns(2)
+                        with col_yes:
+                            if st.button("✅ Yes, Reset", key=f"confirm_yes_all_{user['user_id']}", use_container_width=True):
+                                result = AdminQueries.reset_user_onboarding(user["user_id"], db)
+                                if result["success"]:
+                                    st.success(f"✅ Onboarding reset for {result['user_email']}")
+                                    del st.session_state[f"confirm_reset_all_{user['user_id']}"]
+                                    st.rerun()
+                                else:
+                                    st.error(f"❌ Reset failed: {result.get('error', 'Unknown error')}")
+                        with col_no:
+                            if st.button("❌ Cancel", key=f"confirm_no_all_{user['user_id']}", use_container_width=True):
+                                del st.session_state[f"confirm_reset_all_{user['user_id']}"]
+                                st.rerun()
         else:
             st.info("No onboarded users yet.")
         

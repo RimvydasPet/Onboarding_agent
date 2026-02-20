@@ -213,3 +213,65 @@ class AdminQueries:
                 "progress": progress,
                 "updated_at": profile.updated_at,
             }
+    
+    @staticmethod
+    def reset_user_onboarding(user_id: int, db: Session) -> Dict[str, Any]:
+        """
+        Reset a user's onboarding process to the beginning.
+        Clears profile progress, completed steps, and related memories/conversations.
+        Returns: dict with success status and details.
+        """
+        try:
+            profile = db.query(OnboardingProfileDB).filter(
+                OnboardingProfileDB.user_id == user_id
+            ).first()
+            
+            if not profile:
+                return {"success": False, "error": "No onboarding profile found for this user"}
+            
+            user = db.query(UserDB).filter(UserDB.id == user_id).first()
+            user_email = user.email if user else f"user_{user_id}"
+            
+            # Reset onboarding profile
+            profile.current_stage = "welcome"
+            profile.completed_steps = []
+            profile.progress = {}
+            profile.preferences = {}
+            profile.updated_at = datetime.utcnow()
+            
+            # Clear long-term memories related to onboarding
+            deleted_memories = db.query(LongTermMemoryDB).filter(
+                LongTermMemoryDB.user_id == user_id,
+                LongTermMemoryDB.memory_type == "onboarding"
+            ).delete()
+            
+            # Clear conversation history for fresh start
+            from backend.database.models import ConversationDB, MessageDB
+            conversations = db.query(ConversationDB).filter(
+                ConversationDB.user_id == user_id
+            ).all()
+            
+            deleted_messages = 0
+            deleted_conversations = 0
+            for conv in conversations:
+                deleted_messages += db.query(MessageDB).filter(
+                    MessageDB.conversation_id == conv.id
+                ).delete()
+                deleted_conversations += 1
+            
+            db.query(ConversationDB).filter(
+                ConversationDB.user_id == user_id
+            ).delete()
+            
+            db.commit()
+            
+            return {
+                "success": True,
+                "user_email": user_email,
+                "deleted_memories": deleted_memories,
+                "deleted_conversations": deleted_conversations,
+                "deleted_messages": deleted_messages,
+            }
+        except Exception as e:
+            db.rollback()
+            return {"success": False, "error": str(e)}
