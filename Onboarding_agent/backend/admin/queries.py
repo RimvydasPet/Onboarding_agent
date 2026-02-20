@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session
 from backend.database.models import UserDB, OnboardingProfileDB, LongTermMemoryDB
+from backend.config import settings
 from datetime import datetime
 from typing import List, Dict, Any
 
@@ -142,6 +143,7 @@ class AdminQueries:
     @staticmethod
     def get_newcomers_in_progress(db: Session, limit: int = 15) -> List[Dict[str, Any]]:
         """Get newcomers currently in onboarding (in-progress)."""
+        admin_emails = settings.admin_emails_list
         profiles = db.query(OnboardingProfileDB).filter(
             OnboardingProfileDB.current_stage != "completed"
         ).order_by(OnboardingProfileDB.updated_at.desc()).limit(limit).all()
@@ -149,6 +151,8 @@ class AdminQueries:
         result = []
         for profile in profiles:
             user = db.query(UserDB).filter(UserDB.id == profile.user_id).first()
+            if user and user.email.strip().lower() in admin_emails:
+                continue
             facts = AdminQueries._get_facts_for_user(profile.user_id, profile, db)
             
             if user:

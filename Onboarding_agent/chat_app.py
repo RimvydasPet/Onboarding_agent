@@ -5,7 +5,7 @@ from backend.agent.graph import run_agent
 from backend.rag.initializer import initialize_rag_system
 from backend.database.connection import init_db
 from backend.database.connection import get_db
-from backend.database.models import OnboardingProfileDB
+from backend.database.models import OnboardingProfileDB, UserDB
 from backend.models.schemas import OnboardingStage
 from backend.config import settings
 from backend.memory.long_term import LongTermMemory
@@ -493,6 +493,56 @@ _handle_oauth_callback()
 if not st.session_state.is_authenticated:
     _show_login_page()
     st.stop()
+
+# Resolve user_id from authenticated email
+if st.session_state.is_authenticated and st.session_state.user_email:
+    _auth_db = next(get_db())
+    _auth_user = _auth_db.query(UserDB).filter(
+        UserDB.email == st.session_state.user_email
+    ).first()
+    _is_admin_login = settings.is_admin_email(st.session_state.user_email)
+    
+    if _auth_user:
+        st.session_state.user_id = _auth_user.id
+        # Only create onboarding profile for non-admin users
+        if not _is_admin_login:
+            _auth_profile = _auth_db.query(OnboardingProfileDB).filter(
+                OnboardingProfileDB.user_id == _auth_user.id
+            ).first()
+            if not _auth_profile:
+                _new_profile = OnboardingProfileDB(
+                    user_id=_auth_user.id,
+                    current_stage="welcome",
+                    progress={"facts": {}, "stage_answers": {}},
+                    updated_at=datetime.utcnow(),
+                )
+                _auth_db.add(_new_profile)
+                _auth_db.commit()
+            elif _auth_profile.updated_at is None:
+                _auth_profile.updated_at = datetime.utcnow()
+                _auth_db.commit()
+    else:
+        # Create new UserDB entry
+        _new_user = UserDB(
+            email=st.session_state.user_email,
+            full_name=st.session_state.user_name,
+            hashed_password="oauth_user",
+            role="admin" if _is_admin_login else "user",
+        )
+        _auth_db.add(_new_user)
+        _auth_db.commit()
+        _auth_db.refresh(_new_user)
+        st.session_state.user_id = _new_user.id
+        # Only create onboarding profile for non-admin users
+        if not _is_admin_login:
+            _new_profile = OnboardingProfileDB(
+                user_id=_new_user.id,
+                current_stage="welcome",
+                progress={"facts": {}, "stage_answers": {}},
+                updated_at=datetime.utcnow(),
+            )
+            _auth_db.add(_new_profile)
+            _auth_db.commit()
 
 # Add logout button in sidebar
 with st.sidebar:
