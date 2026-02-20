@@ -878,14 +878,19 @@ def _extract_document_links_from_facts(facts: dict) -> dict:
         
         stage = key.split('.')[0] if '.' in key else 'general'
         
-        urls = re.findall(r'https?://[^\s\)]+', str(value))
+        urls = re.findall(r'(?:https?|file)://[^\s\)]+', str(value))
         doc_refs = re.findall(r'(?:document|rule|policy|procedure|guideline|handbook)[\s:]+([^\n,\.]+)', str(value), re.IGNORECASE)
         
         if urls or doc_refs:
             if stage not in links_by_stage:
                 links_by_stage[stage] = {'urls': [], 'docs': []}
             links_by_stage[stage]['urls'].extend(urls)
-            links_by_stage[stage]['docs'].extend([d.strip() for d in doc_refs])
+            cleaned_doc_refs = []
+            for d in doc_refs:
+                label = re.sub(r'(?:https?|file)://[^\s\)]+', '', str(d)).strip(' -:;,.')
+                if label:
+                    cleaned_doc_refs.append(label)
+            links_by_stage[stage]['docs'].extend(cleaned_doc_refs)
     
     return links_by_stage
 
@@ -902,6 +907,41 @@ def _generate_user_onboarding_pdf(user_id: int, session_id: str, facts: dict) ->
     doc = SimpleDocTemplate(buffer, pagesize=letter, topMargin=0.5*inch, bottomMargin=0.5*inch)
     story = []
     styles = getSampleStyleSheet()
+
+    def _link_label(url: str) -> str:
+        """Return user-friendly link text while keeping URL target intact."""
+        from urllib.parse import urlparse, unquote
+
+        parsed = urlparse(str(url))
+        if parsed.scheme == "file":
+            file_name = Path(unquote(parsed.path)).name
+            return file_name or "Open document"
+        return str(url)
+
+    def _pdf_href_for_url(url: str) -> str:
+        """Convert local file:// links to PDF targets for better click-open behavior."""
+        from urllib.parse import urlparse, unquote
+
+        parsed = urlparse(str(url))
+        if parsed.scheme != "file":
+            return str(url)
+
+        source_path = Path(unquote(parsed.path))
+        if not source_path.exists():
+            return str(url)
+
+        if source_path.suffix.lower() == ".pdf":
+            return source_path.resolve().as_uri()
+
+        pdf_bytes = _convert_to_pdf(str(source_path))
+        if not pdf_bytes:
+            return str(url)
+
+        pdf_cache_dir = Path(__file__).resolve().parent / "generated_resource_pdfs"
+        pdf_cache_dir.mkdir(parents=True, exist_ok=True)
+        target_pdf = pdf_cache_dir / f"{source_path.stem}.pdf"
+        target_pdf.write_bytes(pdf_bytes)
+        return target_pdf.resolve().as_uri()
     
     title_style = ParagraphStyle(
         'CustomTitle',
@@ -968,10 +1008,12 @@ def _generate_user_onboarding_pdf(user_id: int, session_id: str, facts: dict) ->
                 story.append(Paragraph(f"<b>{stage_title}</b>", body_style))
                 
                 for url in set(links_data['urls']):
-                    story.append(Paragraph(f'<link href="{url}" color="blue"><u>{url}</u></link>', body_style))
+                    safe_url = _pdf_href_for_url(url).replace("&", "&amp;")
+                    link_text = _link_label(url).replace("&", "&amp;")
+                    story.append(Paragraph(f'<link href="{safe_url}" color="blue"><u>{link_text}</u></link>', body_style))
                 
-                for doc in set(links_data['docs']):
-                    story.append(Paragraph(f"• {doc.strip()}", body_style))
+                for doc_ref in set(links_data['docs']):
+                    story.append(Paragraph(f"• {doc_ref.strip()}", body_style))
                 
                 story.append(Spacer(1, 0.15*inch))
     
@@ -1228,8 +1270,9 @@ if _onboarding_complete:
                 unsafe_allow_html=True,
             )
             if _ds_msg.get("sources"):
-                with st.expander(f"📚 Resources ({len(_ds_msg['sources'])})"):
-                    for _si, _src in enumerate(_ds_msg["sources"], 1):
+                _shown_sources = _ds_msg["sources"][:3]
+                with st.expander(f"📚 Resources ({len(_shown_sources)})"):
+                    for _si, _src in enumerate(_shown_sources, 1):
                         _src_display = _src.get("file_name") or _src.get("source", "unknown")
                         
                         # Build the source card

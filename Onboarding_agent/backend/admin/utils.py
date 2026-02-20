@@ -2,6 +2,7 @@ import streamlit as st
 from pathlib import Path
 from typing import List, Dict, Any
 import uuid
+import re
 from io import BytesIO
 import logging
 from reportlab.lib.pagesizes import letter, A4
@@ -26,6 +27,13 @@ class AdminUtils:
     def seed_mock_onboarding_users(db: Session) -> Dict[str, int]:
         """Create/update 5 mock users with full, half, and started onboarding states."""
         now = datetime.utcnow()
+        internal_rules_dir = Path(__file__).resolve().parents[3] / "Internal rules"
+
+        code_of_conduct_uri = (internal_rules_dir / "Employee Code of Conduct.md").resolve().as_uri()
+        data_policy_uri = (internal_rules_dir / "Data Classification and Handling Standard.md").resolve().as_uri()
+        access_standard_uri = (internal_rules_dir / "Access Request and Provisioning Standard.md").resolve().as_uri()
+        endpoint_security_uri = (internal_rules_dir / "Endpoint Security Baseline.md").resolve().as_uri()
+        it_credentials_uri = (internal_rules_dir / "IT Onboarding Credentials Guide.md").resolve().as_uri()
 
         mock_users = [
             {
@@ -44,10 +52,15 @@ class AdminUtils:
                     "welcome.name": "Ava Johnson",
                     "welcome.role": "Software Engineer",
                     "welcome.department": "Engineering",
+                    "welcome.resources": f"Read document: Employee Code of Conduct {code_of_conduct_uri}",
                     "department_info.team_structure": "Platform team of 8 engineers.",
+                    "department_info.references": f"Procedure: Access request standard {access_standard_uri}",
                     "key_responsibilities.primary_focus": "Backend API development.",
+                    "key_responsibilities.references": "Guideline: API standards handbook",
                     "tools_systems.main_tools": "GitHub, Jira, Slack, VS Code.",
+                    "tools_systems.references": f"Tool guide: Endpoint security baseline {endpoint_security_uri}",
                     "training_needs.priority_area": "Internal architecture onboarding.",
+                    "training_needs.references": "Training document: Security Awareness Handbook",
                 },
                 "days_ago": 9,
             },
@@ -67,10 +80,14 @@ class AdminUtils:
                     "welcome.name": "Liam Carter",
                     "welcome.role": "Data Analyst",
                     "welcome.department": "Analytics",
+                    "welcome.resources": "Policy: Data Access Policy",
                     "department_info.team_structure": "BI team with analysts and data engineers.",
+                    "department_info.references": f"Document: Data classification standard {data_policy_uri}",
                     "key_responsibilities.primary_focus": "KPI dashboarding and reporting.",
                     "tools_systems.main_tools": "SQL, Power BI, Python.",
+                    "tools_systems.references": "Procedure: BI dashboard release checklist",
                     "training_needs.priority_area": "Data governance policies.",
+                    "training_needs.references": f"Guideline: Data handling standard {data_policy_uri}",
                 },
                 "days_ago": 7,
             },
@@ -84,7 +101,9 @@ class AdminUtils:
                     "welcome.name": "Noah Rivera",
                     "welcome.role": "QA Engineer",
                     "welcome.department": "Engineering",
+                    "welcome.resources": "Read rule: QA release gates",
                     "department_info.team_structure": "QA pod supporting 3 product squads.",
+                    "department_info.references": f"Document: Acceptable use policy {code_of_conduct_uri}",
                 },
                 "days_ago": 3,
             },
@@ -98,8 +117,10 @@ class AdminUtils:
                     "welcome.name": "Mia Patel",
                     "welcome.role": "Project Manager",
                     "welcome.department": "Operations",
+                    "welcome.resources": "Policy: Project governance handbook",
                     "department_info.team_structure": "PMO team with cross-functional leads.",
                     "key_responsibilities.primary_focus": "Sprint planning and delivery tracking.",
+                    "key_responsibilities.references": f"Procedure: Access request standard {access_standard_uri}",
                 },
                 "days_ago": 2,
             },
@@ -113,6 +134,7 @@ class AdminUtils:
                     "welcome.name": "Ethan Brooks",
                     "welcome.role": "IT Administrator",
                     "welcome.department": "IT",
+                    "welcome.resources": f"Document: IT onboarding credentials guide {it_credentials_uri}",
                 },
                 "days_ago": 1,
             },
@@ -381,6 +403,41 @@ class AdminUtils:
                     return " ".join(parts)
                 return " ".join(answers[:3])
 
+            def extract_document_links_from_facts() -> Dict[str, Dict[str, List[str]]]:
+                links_by_stage: Dict[str, Dict[str, List[str]]] = {}
+                for key, value in facts.items():
+                    if not isinstance(value, str):
+                        continue
+
+                    stage = key.split('.')[0] if '.' in key else 'general'
+                    urls = re.findall(r'(?:https?|file)://[^\s\)]+', value)
+                    doc_refs = re.findall(
+                        r'(?:document|rule|policy|procedure|guideline|handbook)[\s:]+([^\n,\.]+)',
+                        value,
+                        re.IGNORECASE,
+                    )
+
+                    if not urls and not doc_refs:
+                        continue
+
+                    if stage not in links_by_stage:
+                        links_by_stage[stage] = {"urls": [], "docs": []}
+
+                    links_by_stage[stage]["urls"].extend(urls)
+                    links_by_stage[stage]["docs"].extend([d.strip() for d in doc_refs if d.strip()])
+
+                return links_by_stage
+
+            def link_label(url: str) -> str:
+                """Return readable link text while preserving full URL target."""
+                from urllib.parse import urlparse, unquote
+
+                parsed = urlparse(str(url))
+                if parsed.scheme == "file":
+                    file_name = Path(unquote(parsed.path)).name
+                    return file_name or "Open document"
+                return str(url)
+
             # ── Title ──────────────────────────────────────────────
             full_name = onboarding_data.get("full_name") or facts.get("welcome.name", "N/A")
             role = facts.get("welcome.role", onboarding_data.get("current_stage", "N/A"))
@@ -454,6 +511,39 @@ class AdminUtils:
                     story.append(Paragraph("Not yet completed.", normal_style))
 
                 story.append(Spacer(1, 0.05*inch))
+
+            # ── Mentioned Documents & Links ───────────────────────
+            links_by_stage = extract_document_links_from_facts()
+            if links_by_stage:
+                story.append(Spacer(1, 0.08*inch))
+                story.append(Paragraph("Mentioned Documents & Links", section_style))
+
+                for stage_key, stage_label in stage_labels.items():
+                    stage_data = links_by_stage.get(stage_key)
+                    if not stage_data:
+                        continue
+
+                    urls = sorted(set(stage_data.get("urls", [])))
+                    docs = sorted(set(stage_data.get("docs", [])))
+                    if not urls and not docs:
+                        continue
+
+                    story.append(Paragraph(stage_label, styles['Heading4']))
+
+                    for url in urls:
+                        safe_url = url.replace("&", "&amp;")
+                        link_text = link_label(url).replace("&", "&amp;")
+                        story.append(
+                            Paragraph(
+                                f'• <link href="{safe_url}" color="blue"><u>{link_text}</u></link>',
+                                normal_style,
+                            )
+                        )
+
+                    for doc_name in docs:
+                        story.append(Paragraph(f"• {doc_name}", normal_style))
+
+                    story.append(Spacer(1, 0.04*inch))
 
             # ── Footer ─────────────────────────────────────────────
             story.append(Spacer(1, 0.2*inch))
