@@ -962,8 +962,64 @@ def _extract_document_links_from_facts(facts: dict) -> dict:
     return links_by_stage
 
 
-def _generate_user_onboarding_pdf(user_id: int, session_id: str, facts: dict) -> bytes:
-    """Generate a user-friendly PDF with document links extracted from answers."""
+def _extract_document_links_from_messages(messages: list) -> dict:
+    """Extract document links from conversation messages (sources provided by agent)."""
+    links_by_stage = {}
+    
+    for msg in messages:
+        if msg.get("role") != "assistant":
+            continue
+        
+        stage = msg.get("stage", "general")
+        sources = msg.get("sources", [])
+        
+        if not sources:
+            continue
+        
+        if stage not in links_by_stage:
+            links_by_stage[stage] = {'urls': [], 'docs': []}
+        
+        for src in sources:
+            doc_link = src.get("document_link", "")
+            file_name = src.get("file_name", "") or src.get("source", "")
+            
+            if doc_link:
+                # Convert to file:// URI if it's a local path
+                if not doc_link.startswith(("http://", "https://", "file://")):
+                    from pathlib import Path
+                    doc_path = Path(doc_link)
+                    if doc_path.exists():
+                        links_by_stage[stage]['urls'].append(doc_path.resolve().as_uri())
+                    elif file_name:
+                        links_by_stage[stage]['docs'].append(file_name)
+                else:
+                    links_by_stage[stage]['urls'].append(doc_link)
+            elif file_name:
+                links_by_stage[stage]['docs'].append(file_name)
+    
+    return links_by_stage
+
+
+def _merge_links_by_stage(links1: dict, links2: dict) -> dict:
+    """Merge two links_by_stage dictionaries."""
+    merged = {}
+    all_stages = set(links1.keys()) | set(links2.keys())
+    
+    for stage in all_stages:
+        merged[stage] = {'urls': [], 'docs': []}
+        if stage in links1:
+            merged[stage]['urls'].extend(links1[stage].get('urls', []))
+            merged[stage]['docs'].extend(links1[stage].get('docs', []))
+        if stage in links2:
+            merged[stage]['urls'].extend(links2[stage].get('urls', []))
+            merged[stage]['docs'].extend(links2[stage].get('docs', []))
+    
+    return merged
+
+
+def _generate_user_onboarding_pdf(user_id: int, session_id: str, facts: dict, messages: list = None) -> bytes:
+    """Generate a user-friendly PDF with document links and stage summaries."""
+    import re
     from reportlab.lib import colors
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
@@ -1009,6 +1065,33 @@ def _generate_user_onboarding_pdf(user_id: int, session_id: str, facts: dict) ->
         target_pdf = pdf_cache_dir / f"{source_path.stem}.pdf"
         target_pdf.write_bytes(pdf_bytes)
         return target_pdf.resolve().as_uri()
+
+    def _sanitize_text(text: str) -> str:
+        """Remove raw URLs/URIs from visible text."""
+        cleaned = re.sub(r'(?:https?|file)://[^\s\)]+', '', str(text or ''))
+        cleaned = re.sub(r'\s{2,}', ' ', cleaned)
+        return cleaned.strip()
+
+    def _get_stage_summary(stage_key: str) -> str:
+        """Extract a brief summary of what the newcomer needs to know from this stage."""
+        stage_summaries = {
+            'welcome': "Basic profile information and introduction to the company.",
+            'department_info': "Understanding your team structure, key contacts, and department workflows.",
+            'key_responsibilities': "Your primary duties, performance expectations, and initial tasks.",
+            'tools_systems': "Software, platforms, and access credentials you'll need for your role.",
+            'training_needs': "Required training modules, certifications, and skill development areas.",
+        }
+        return stage_summaries.get(stage_key, "")
+
+    def _is_similar_doc_name_pdf(doc_name: str, shown_names: set) -> bool:
+        """Check if doc_name is similar to any shown name using word overlap."""
+        doc_words = set(doc_name.lower().replace('_', ' ').replace('-', ' ').split())
+        for shown in shown_names:
+            shown_words = set(shown.split())
+            common_words = doc_words & shown_words
+            if len(common_words) >= min(2, len(doc_words), len(shown_words)):
+                return True
+        return False
     
     title_style = ParagraphStyle(
         'CustomTitle',
@@ -1039,6 +1122,16 @@ def _generate_user_onboarding_pdf(user_id: int, session_id: str, facts: dict) ->
         fontName='Helvetica-Bold'
     )
     
+    stage_header_style = ParagraphStyle(
+        'StageHeader',
+        parent=styles['Heading3'],
+        fontSize=12,
+        textColor=colors.HexColor('#333333'),
+        spaceAfter=6,
+        spaceBefore=12,
+        fontName='Helvetica-Bold'
+    )
+    
     body_style = ParagraphStyle(
         'BodyStyle',
         parent=styles['Normal'],
@@ -1047,61 +1140,75 @@ def _generate_user_onboarding_pdf(user_id: int, session_id: str, facts: dict) ->
         leftIndent=20
     )
     
+    summary_style = ParagraphStyle(
+        'SummaryStyle',
+        parent=styles['Normal'],
+        fontSize=10,
+        textColor=colors.HexColor('#555555'),
+        spaceAfter=8,
+        leftIndent=20,
+        fontName='Helvetica-Oblique'
+    )
+    
     story.append(Paragraph("🎯 Your Onboarding Summary", title_style))
     
     user_name = facts.get('welcome.name', 'New Team Member')
     user_role = facts.get('welcome.role', 'N/A')
+    user_dept = facts.get('welcome.department', 'N/A')
     
     story.append(Paragraph(f"Welcome, {user_name}!", subtitle_style))
-    story.append(Paragraph(f"Role: {user_role}", body_style))
+    story.append(Paragraph(f"Role: {user_role} | Department: {user_dept}", body_style))
     story.append(Paragraph(f"Generated: {datetime.now().strftime('%B %d, %Y')}", body_style))
     story.append(Spacer(1, 0.3*inch))
     
-    links_by_stage = _extract_document_links_from_facts(facts)
+    links_from_facts = _extract_document_links_from_facts(facts)
+    links_from_messages = _extract_document_links_from_messages(messages or [])
+    links_by_stage = _merge_links_by_stage(links_from_facts, links_from_messages)
     
-    if links_by_stage:
-        story.append(Paragraph("📚 Important Documents & Resources", section_style))
+    stage_order = ['welcome', 'department_info', 'key_responsibilities', 'tools_systems', 'training_needs']
+    stage_titles = {
+        'welcome': 'Welcome & Profile',
+        'department_info': 'Department Information',
+        'key_responsibilities': 'Key Responsibilities',
+        'tools_systems': 'Tools & Systems',
+        'training_needs': 'Training Needs'
+    }
+    
+    for stage_key in stage_order:
+        stage_facts = [k for k in facts.keys() if k.startswith(f"{stage_key}.")]
+        if not stage_facts:
+            continue
         
-        for stage, links_data in sorted(links_by_stage.items()):
-            if links_data['urls'] or links_data['docs']:
-                stage_title = {
-                    'welcome': 'Welcome & Profile',
-                    'department_info': 'Department Information',
-                    'key_responsibilities': 'Key Responsibilities',
-                    'tools_systems': 'Tools & Systems',
-                    'training_needs': 'Training Needs'
-                }.get(stage, stage.replace('_', ' ').title())
-                
-                story.append(Paragraph(f"<b>{stage_title}</b>", body_style))
-                
-                # Collect document names from URLs to avoid duplicates
-                shown_doc_names = set()
-                
-                def _is_similar_doc_name_pdf(doc_name: str, shown_names: set) -> bool:
-                    """Check if doc_name is similar to any shown name using word overlap."""
-                    doc_words = set(doc_name.lower().replace('_', ' ').replace('-', ' ').split())
-                    for shown in shown_names:
-                        shown_words = set(shown.split())
-                        common_words = doc_words & shown_words
-                        if len(common_words) >= min(2, len(doc_words), len(shown_words)):
-                            return True
-                    return False
-                
-                for url in set(links_data['urls']):
-                    safe_url = _pdf_href_for_url(url).replace("&", "&amp;")
-                    link_text = _link_label(url).replace("&", "&amp;")
-                    shown_doc_names.add(link_text.lower().replace('_', ' ').replace('-', ' ').replace('.pdf', '').replace('.md', ''))
-                    story.append(Paragraph(f'• <link href="{safe_url}" color="blue"><u>{link_text}</u></link>', body_style))
-                
-                # Filter out plain text docs that match URL document names
-                for doc_ref in set(links_data['docs']):
-                    if not _is_similar_doc_name_pdf(doc_ref.strip(), shown_doc_names):
-                        story.append(Paragraph(f"• {doc_ref.strip()}", body_style))
-                
-                story.append(Spacer(1, 0.15*inch))
+        stage_title = stage_titles.get(stage_key, stage_key.replace('_', ' ').title())
+        story.append(Paragraph(f"📌 {stage_title}", stage_header_style))
+        
+        stage_summary = _get_stage_summary(stage_key)
+        if stage_summary:
+            story.append(Paragraph(stage_summary, summary_style))
+        
+        links_data = links_by_stage.get(stage_key, {'urls': [], 'docs': []})
+        
+        if links_data['urls'] or links_data['docs']:
+            story.append(Paragraph("<b>Related Documents:</b>", body_style))
+            
+            shown_doc_names = set()
+            
+            for url in sorted(set(links_data['urls'])):
+                safe_url = _pdf_href_for_url(url).replace("&", "&amp;")
+                link_text = _link_label(url).replace("&", "&amp;")
+                shown_doc_names.add(link_text.lower().replace('_', ' ').replace('-', ' ').replace('.pdf', '').replace('.md', ''))
+                story.append(Paragraph(f'• <link href="{safe_url}" color="blue"><u>{link_text}</u></link>', body_style))
+            
+            for doc_ref in sorted(set(links_data['docs'])):
+                if not _is_similar_doc_name_pdf(doc_ref.strip(), shown_doc_names):
+                    story.append(Paragraph(f"• {doc_ref.strip()}", body_style))
+        else:
+            story.append(Paragraph("<i>No specific documents referenced for this stage.</i>", summary_style))
+        
+        story.append(Spacer(1, 0.15*inch))
     
     story.append(Spacer(1, 0.3*inch))
-    footer_text = "<i>This is your personalized onboarding summary with links to resources mentioned during your onboarding process.</i>"
+    footer_text = "<i>This is your personalized onboarding summary with key information and document links for each stage.</i>"
     story.append(Paragraph(footer_text, subtitle_style))
     
     doc.build(story)
@@ -1265,6 +1372,7 @@ if _onboarding_complete:
                 user_id=st.session_state.user_id,
                 session_id=st.session_state.session_id,
                 facts=_early_facts,
+                messages=st.session_state.messages,
             )
             st.sidebar.download_button(
                 label="📥 Download Your Resources",
@@ -1419,9 +1527,14 @@ if _onboarding_complete:
                                     pdf_link_html = f'<a href="data:application/pdf;base64,{pdf_b64}" target="_blank" style="color: #667eea; text-decoration: underline; cursor: pointer;">{_src_display}</a>'
                             except Exception as e:
                                 logger.warning(f"Could not create PDF link for {_src_display}: {e}")
+
+                        _score = _src.get("score")
+                        _relevance_text = ""
+                        if isinstance(_score, (int, float)):
+                            _relevance_text = f' <em>(Relevance: {_score * 100:.1f}%)</em>'
                         
                         # Build simple document link format
-                        source_html = f'<div class="source-card"><strong>Document:</strong> {pdf_link_html}</div>'
+                        source_html = f'<div class="source-card"><strong>Document:</strong> {pdf_link_html}{_relevance_text}</div>'
                         st.markdown(source_html, unsafe_allow_html=True)
 
     # Chat input for document search
@@ -1796,14 +1909,15 @@ _completed_stages_for_download = [
     if stage_id != "completed" and _is_stage_complete(stage_id, _sidebar_facts)
 ]
 if _completed_stages_for_download:
-    _comprehensive_pdf = _generate_comprehensive_onboarding_pdf(
+    _user_summary_pdf = _generate_user_onboarding_pdf(
         user_id=st.session_state.user_id,
         session_id=st.session_state.session_id,
         facts=_sidebar_facts,
+        messages=st.session_state.messages,
     )
     st.sidebar.download_button(
         label="📥 Download Complete Summary",
-        data=_comprehensive_pdf,
+        data=_user_summary_pdf,
         file_name=f"onboarding_summary_{st.session_state.session_id[:8]}.pdf",
         mime="application/pdf",
         key="sidebar_comprehensive_dl",
@@ -1967,9 +2081,14 @@ for message in current_stage_messages:
                                 pdf_link_html = f'<a href="data:application/pdf;base64,{pdf_b64}" target="_blank" style="color: #667eea; text-decoration: underline; cursor: pointer;">{_src_display_name}</a>'
                         except Exception as e:
                             logger.warning(f"Could not create PDF link for {_src_display_name}: {e}")
+
+                    _score = source.get("score")
+                    _relevance_text = ""
+                    if isinstance(_score, (int, float)):
+                        _relevance_text = f' <em>(Relevance: {_score * 100:.1f}%)</em>'
                     
                     # Build simple document link format
-                    source_html = f'<div class="source-card"><strong>Document:</strong> {pdf_link_html}</div>'
+                    source_html = f'<div class="source-card"><strong>Document:</strong> {pdf_link_html}{_relevance_text}</div>'
                     st.markdown(source_html, unsafe_allow_html=True)
 
 

@@ -380,34 +380,15 @@ class AdminUtils:
                 return cleaned.strip()
 
             def extract_stage_summary(stage_key: str) -> str:
-                """Extract readable 2-3 sentence summary of newcomer answers only."""
-                answers = []
-                field_keys = [k for k in facts.keys() if k.startswith(f"{stage_key}.") and not k.endswith("._qlabel")]
-                for field_key in field_keys:
-                    answer = facts.get(field_key)
-                    if not answer:
-                        continue
-                    answer_str = sanitize_report_text(answer)
-                    if answer_str.lower() in ("yes", "no", "move on", "none", ""):
-                        continue
-                    answers.append(answer_str)
-                if not answers:
-                    return ""
-                if stage_key == "welcome":
-                    name = facts.get("welcome.name", "")
-                    role_val = facts.get("welcome.role", "")
-                    dept = facts.get("welcome.department", "")
-                    phone = facts.get("welcome.phone_number", "")
-                    pronouns = facts.get("welcome.pronouns", "")
-                    parts = []
-                    if name and role_val and dept:
-                        parts.append(f"{name} is joining as {role_val} in the {dept} department.")
-                    if phone:
-                        parts.append(f"Contact: {sanitize_report_text(phone)}.")
-                    if pronouns and pronouns.lower() != "none":
-                        parts.append(f"Pronouns: {sanitize_report_text(pronouns)}.")
-                    return sanitize_report_text(" ".join(parts))
-                return sanitize_report_text(" ".join(answers[:3]))
+                """Return a brief summary of what the newcomer needs to know from this stage."""
+                stage_summaries = {
+                    "welcome": "Basic profile information and introduction to the company.",
+                    "department_info": "Understanding team structure, key contacts, and department workflows.",
+                    "key_responsibilities": "Primary duties, performance expectations, and initial tasks.",
+                    "tools_systems": "Software, platforms, and access credentials needed for the role.",
+                    "training_needs": "Required training modules, certifications, and skill development areas.",
+                }
+                return stage_summaries.get(stage_key, "")
 
             def extract_document_links_from_facts() -> Dict[str, Dict[str, List[str]]]:
                 links_by_stage: Dict[str, Dict[str, List[str]]] = {}

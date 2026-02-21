@@ -926,7 +926,19 @@ Rules:
                 state["onboarding_facts"] = onboarding_facts
                 # Expose sources so the UI can show them with clickable links
                 sources = []
+                seen_source_keys = set()
                 for doc in relevant_docs:
+                    doc_key = str(
+                        doc.metadata.get("file_path")
+                        or doc.metadata.get("file_name")
+                        or doc.metadata.get("source")
+                        or ""
+                    ).strip().lower()
+                    if doc_key and doc_key in seen_source_keys:
+                        continue
+                    if doc_key:
+                        seen_source_keys.add(doc_key)
+
                     # Strip YAML frontmatter from preview
                     content = doc.page_content
                     if content.startswith("doc_id:") or content.startswith("---"):
@@ -1015,7 +1027,19 @@ Rules:
             state["context_string"] = self.rag.get_context_string(result["documents"])
             
             sources = []
+            seen_source_keys = set()
             for doc in result["documents"]:
+                doc_key = str(
+                    doc.metadata.get("file_path")
+                    or doc.metadata.get("file_name")
+                    or doc.metadata.get("source")
+                    or ""
+                ).strip().lower()
+                if doc_key and doc_key in seen_source_keys:
+                    continue
+                if doc_key:
+                    seen_source_keys.add(doc_key)
+
                 sources.append({
                     "source": doc.metadata.get("source", "unknown"),
                     "category": doc.metadata.get("category", "general"),
