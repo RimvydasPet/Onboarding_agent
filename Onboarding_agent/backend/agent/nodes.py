@@ -933,26 +933,47 @@ Rules:
             
             logger.info(f"Found {len(internal_rules_docs)} internal rules docs and {len(other_docs)} other docs")
             
-            # Keep only docs above the relevance threshold, prioritizing internal rules
-            relevant_docs = [
+            # Keep docs above the relevance threshold.
+            # We still prioritize internal rules, but we must not ignore other
+            # company documents (e.g., uploaded org-structure docs).
+            relevant_internal_rules_docs = [
                 d for d in internal_rules_docs
                 if d.metadata.get("score", 0.0) >= MIN_RELEVANCE_SCORE
             ]
-            logger.info(f"Found {len(relevant_docs)} internal rules docs above threshold {MIN_RELEVANCE_SCORE}")
+            relevant_other_docs = [
+                d for d in other_docs
+                if d.metadata.get("score", 0.0) >= MIN_RELEVANCE_SCORE
+            ]
+            relevant_docs = relevant_internal_rules_docs + relevant_other_docs
+            logger.info(
+                "Found %s relevant docs above threshold %s (%s internal rules, %s other)",
+                len(relevant_docs),
+                MIN_RELEVANCE_SCORE,
+                len(relevant_internal_rules_docs),
+                len(relevant_other_docs),
+            )
             
-            # If no internal rules docs found, try keyword matching on internal rules
+            # If no docs are above threshold, try keyword matching as a fallback.
             if not relevant_docs:
-                logger.info("No internal rules docs above threshold, trying keyword matching...")
+                logger.info("No docs above threshold, trying keyword matching...")
                 question_lower = user_question.lower()
-                for doc in internal_rules_docs:
+                question_keywords = {
+                    kw
+                    for kw in re.findall(r"[a-zA-Z]{4,}", question_lower)
+                    if kw not in {
+                        "what", "when", "where", "which", "who", "will", "this", "that",
+                        "with", "about", "from", "have", "your", "their", "there", "would",
+                    }
+                }
+                for doc in docs:
                     source = str(doc.metadata.get("source", "")).lower()
                     content = doc.page_content.lower()
                     
-                    # Check if document source or content contains keywords from the question
-                    keywords = question_lower.split()
-                    matching_keywords = sum(1 for kw in keywords if len(kw) > 3 and kw in source)
+                    # Check if document source or content contains keywords from the question.
+                    matching_source_keywords = sum(1 for kw in question_keywords if kw in source)
+                    matching_content_keywords = sum(1 for kw in question_keywords if kw in content)
                     
-                    if matching_keywords >= 1 or any(kw in content for kw in ["administrator", "responsibilities", "admin", "kpi"]):
+                    if matching_source_keywords >= 1 or matching_content_keywords >= 2:
                         relevant_docs.append(doc)
                         logger.info(f"Keyword match found in {source}")
                         if len(relevant_docs) >= 3:

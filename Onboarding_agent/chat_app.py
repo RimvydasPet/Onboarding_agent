@@ -1340,6 +1340,30 @@ def _is_onboarding_fully_complete(facts: dict) -> bool:
 # Early check: if onboarding is fully complete, switch to Document Search mode
 # ---------------------------------------------------------------------------
 _early_facts = _get_onboarding_facts(st.session_state.user_id)
+
+# ---------------------------------------------------------------------------
+# Detect if admin reset the user's onboarding (database empty but session has old data)
+# If facts are empty but session state shows progress, force a full session reset
+# ---------------------------------------------------------------------------
+_session_has_progress = (
+    st.session_state.current_stage != "welcome"
+    or st.session_state.unlocked_stages != {"welcome"}
+)
+if not _early_facts and _session_has_progress:
+    # Database was reset by admin - clear session state to match
+    st.session_state.session_id = str(uuid.uuid4())
+    st.session_state.messages = []
+    st.session_state.current_stage = "welcome"
+    st.session_state.unlocked_stages = {"welcome"}
+    st.session_state.onboarding_started = False
+    st.session_state.resume_kickoff_done = False
+    st.session_state.resume_initialized = False
+    st.session_state.revisit_message_shown = False
+    st.session_state.last_stage = None
+    if "skip_next_stage_intro" in st.session_state:
+        del st.session_state["skip_next_stage_intro"]
+    st.rerun()
+
 _onboarding_complete = _is_onboarding_fully_complete(_early_facts)
 
 if _onboarding_complete:

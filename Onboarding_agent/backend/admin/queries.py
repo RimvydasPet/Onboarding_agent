@@ -247,10 +247,10 @@ class AdminQueries:
             profile.preferences = {}
             profile.updated_at = datetime.utcnow()
             
-            # Clear long-term memories related to onboarding
+            # Clear ALL long-term memories for this user (not just onboarding type)
+            # This ensures facts stored under different memory types are also cleared
             deleted_memories = db.query(LongTermMemoryDB).filter(
-                LongTermMemoryDB.user_id == user_id,
-                LongTermMemoryDB.memory_type == "onboarding"
+                LongTermMemoryDB.user_id == user_id
             ).delete()
             
             # Clear conversation history for fresh start
