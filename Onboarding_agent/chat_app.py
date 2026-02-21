@@ -198,6 +198,33 @@ def _path_from_file_url(url: str) -> Path:
     return Path(raw_path)
 
 
+def _build_user_download_filename(facts: dict, prefix: str, fallback: str) -> str:
+    """Build a friendly PDF filename using user's input name + surname."""
+    import re
+
+    name = str(facts.get("welcome.name", "")).strip()
+    surname = str(
+        facts.get("welcome.name_alias")
+        or facts.get("welcome.surname")
+        or facts.get("welcome.last_name")
+        or ""
+    ).strip()
+
+    def _safe_part(value: str) -> str:
+        cleaned = re.sub(r"[^A-Za-z0-9]+", "_", value.strip())
+        cleaned = re.sub(r"_+", "_", cleaned).strip("_")
+        return cleaned
+
+    name_part = _safe_part(name)
+    surname_part = _safe_part(surname)
+
+    if name_part and surname_part:
+        return f"{prefix}_{name_part}_{surname_part}.pdf"
+    if name_part:
+        return f"{prefix}_{name_part}.pdf"
+    return f"{prefix}_{fallback}.pdf"
+
+
 st.set_page_config(
     page_title="Onboarding Assistant with RAG",
     page_icon="🤖",
@@ -1359,10 +1386,15 @@ if _onboarding_complete:
                 session_id=st.session_state.session_id,
                 facts=_early_facts,
             )
+            _ds_summary_filename = _build_user_download_filename(
+                facts=_early_facts,
+                prefix="onboarding_summary",
+                fallback=st.session_state.session_id[:8],
+            )
             st.sidebar.download_button(
                 label="📥 Download Complete Summary",
                 data=_ds_pdf,
-                file_name=f"onboarding_summary_{st.session_state.session_id[:8]}.pdf",
+                file_name=_ds_summary_filename,
                 mime="application/pdf",
                 key="ds_comprehensive_dl",
                 use_container_width=True,
@@ -1374,10 +1406,15 @@ if _onboarding_complete:
                 facts=_early_facts,
                 messages=st.session_state.messages,
             )
+            _user_resources_filename = _build_user_download_filename(
+                facts=_early_facts,
+                prefix="onboarding_resources",
+                fallback=st.session_state.session_id[:8],
+            )
             st.sidebar.download_button(
                 label="📥 Download Your Resources",
                 data=_user_pdf,
-                file_name=f"onboarding_resources_{st.session_state.session_id[:8]}.pdf",
+                file_name=_user_resources_filename,
                 mime="application/pdf",
                 key="user_resources_dl",
                 use_container_width=True,
@@ -1899,10 +1936,15 @@ if _completed_stages_for_download:
         facts=_sidebar_facts,
         messages=st.session_state.messages,
     )
+    _sidebar_summary_filename = _build_user_download_filename(
+        facts=_sidebar_facts,
+        prefix="onboarding_summary",
+        fallback=st.session_state.session_id[:8],
+    )
     st.sidebar.download_button(
         label="📥 Download Complete Summary",
         data=_user_summary_pdf,
-        file_name=f"onboarding_summary_{st.session_state.session_id[:8]}.pdf",
+        file_name=_sidebar_summary_filename,
         mime="application/pdf",
         key="sidebar_comprehensive_dl",
         use_container_width=True
