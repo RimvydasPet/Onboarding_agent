@@ -1596,6 +1596,7 @@ st.sidebar.markdown("---")
 
 # Go Back feature - allow users to revisit completed stages
 st.sidebar.markdown("### 🔙 Revisit a Stage")
+actual_progress_stage = _derive_current_stage_from_facts(_early_facts)
 completed_stages = [
     (stages[i][0], stages[i][1])
     for i in range(len(stages))
@@ -1608,38 +1609,21 @@ if completed_stages:
         format_func=lambda x: x[1],
         key="go_back_stage_selector"
     )
-    # Find the actual current progress stage (the one before "completed")
-    current_progress_stage = None
-    for i in range(len(stages) - 1, -1, -1):
-        if stages[i][0] != "completed" and _is_stage_complete(stages[i][0], _early_facts):
-            current_progress_stage = stages[i][0]
-            break
-    if current_progress_stage is None:
-        # If no stage is complete, find the first incomplete stage
-        for stage_id, _, _ in stages:
-            if stage_id != "completed" and not _is_stage_complete(stage_id, _early_facts):
-                current_progress_stage = stage_id
-                break
+    # True progress stage is the first incomplete stage.
+    current_progress_stage = actual_progress_stage
     
-    col_back_1, col_back_2 = st.sidebar.columns(2)
-    with col_back_1:
-        if st.button("📖 Go Back", use_container_width=True, key="go_back_button"):
-            st.session_state.current_stage = go_back_stage[0]
-            st.session_state.revisit_message_shown = False
-            st.rerun()
-    
-    with col_back_2:
-        if current_progress_stage and current_progress_stage != st.session_state.current_stage:
-            if st.button("↩️ Current", use_container_width=True, key="back_to_current_button"):
-                st.session_state.current_stage = current_progress_stage
-                st.session_state.revisit_message_shown = False
-                st.rerun()
+    if st.sidebar.button("📖 Go Back", use_container_width=True, key="go_back_button"):
+        st.session_state.current_stage = go_back_stage[0]
+        st.session_state.revisit_message_shown = False
+        st.rerun()
 
 # Show "Continue to Progress" button when user is viewing a revisited stage
-_is_revisiting = current_stage_index > 0 and st.session_state.current_stage in [s[0] for s in stages[:current_stage_index] if s[0] != "completed"]
+_is_revisiting = (
+    st.session_state.current_stage != actual_progress_stage
+    and st.session_state.current_stage in [s[0] for s in stages if s[0] != "completed"]
+)
 if _is_revisiting:
-    # The actual progress stage is the one at current_stage_index
-    _progress_stage = stages[current_stage_index][0] if current_stage_index < len(stages) else None
+    _progress_stage = actual_progress_stage
     
     if _progress_stage and _progress_stage != st.session_state.current_stage:
         if st.sidebar.button("⏭️ Continue to Progress", use_container_width=True, key="continue_progress_button"):

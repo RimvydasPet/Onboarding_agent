@@ -213,6 +213,11 @@ class AgentNodes:
         return f"role_research.role:{cls._normalize_role(role)}.stage:{stage}"
 
     @classmethod
+    def _stage_content_cache_key(cls, role: Any, stage: str) -> str:
+        stage = cls._normalize_stage_key(stage)
+        return f"stage_content.role:{cls._normalize_role(role)}.stage:{stage}"
+
+    @classmethod
     def _missing_fields(
         cls,
         stage: str,
@@ -435,6 +440,40 @@ class AgentNodes:
 
         stage_hint = stage_guidance.get(stage, "Generate preference or confirmation questions.")
 
+        stage_content_guidance = {
+            "department_info": (
+                "Generate stage_content that EXPLAINS:\n"
+                "- The typical department structure for this role\n"
+                "- Who the key stakeholders and team members typically are\n"
+                "- How this department fits into the company\n"
+                "- What collaboration looks like with other teams"
+            ),
+            "key_responsibilities": (
+                "Generate stage_content that EXPLAINS:\n"
+                "- The core day-to-day responsibilities for this role\n"
+                "- Key performance indicators (KPIs) and success metrics\n"
+                "- First-week priorities and quick wins\n"
+                "- First-month goals and milestones\n"
+                "- Decision-making scope (what they can decide vs. needs approval)"
+            ),
+            "tools_systems": (
+                "Generate stage_content that EXPLAINS:\n"
+                "- The core tools and software this role uses daily\n"
+                "- IT access and credentials they'll receive\n"
+                "- Hardware setup checklist\n"
+                "- Key integrations and workflows"
+            ),
+            "training_needs": (
+                "Generate stage_content that EXPLAINS:\n"
+                "- Mandatory compliance training modules\n"
+                "- Role-specific training and certifications\n"
+                "- Available learning resources and mentorship\n"
+                "- Training timeline and deadlines"
+            ),
+        }
+
+        content_hint = stage_content_guidance.get(stage, "Generate informative content about this stage.")
+
         prompt = f"""You are creating a role-specific onboarding guide for a new hire's FIRST DAY.
 
 ROLE: {role}
@@ -445,19 +484,24 @@ Your job is to generate content that GUIDES and INFORMS them, NOT quiz them on t
 
 {stage_hint}
 
+CONTENT TO GENERATE:
+{content_hint}
+
 Use the following web research snippets as background:
 {research_block}
 
 Return ONLY valid JSON with this schema:
 {{
+  "stage_content": "A detailed, friendly explanation (3-5 paragraphs) that TELLS the newcomer the information they need to know for this stage. Use bullet points and formatting. This is what you present BEFORE asking any questions.",
   "onboarding_checklist": ["..."],
   "questions": [{{"field": "q1", "question": "..."}}]
 }}
 
 Rules:
+- stage_content MUST be substantive (300-500 words) and actually INFORM the newcomer about their role/responsibilities/tools/training.
 - Provide 5-10 checklist items relevant to the role and stage.
 - Provide 3-5 questions ONLY for the given STAGE.
-- Questions must be PREFERENCE, CONFIRMATION, or FEEDBACK questions — things the newcomer CAN answer.
+- Questions must be PREFERENCE, CONFIRMATION, or FEEDBACK questions — things the newcomer CAN answer AFTER reading the stage_content.
 - NEVER ask the newcomer to explain company structure, processes, or tools they haven't learned yet.
 - Good: "Does that make sense?", "Would you like to know more about X?", "Any questions so far?"
 - Bad: "Can you describe the department structure?", "What tools does your team use?"
@@ -537,6 +581,8 @@ Rules:
         cached_bank = ltm.get_memory(state["user_id"], "onboarding_generated", bank_key)
         cached_checklist = ltm.get_memory(state["user_id"], "onboarding_generated", checklist_key)
         cached_research = ltm.get_memory(state["user_id"], "onboarding_generated", research_key)
+        content_key = self._stage_content_cache_key(role, stage)
+        cached_content = ltm.get_memory(state["user_id"], "onboarding_generated", content_key)
 
         if isinstance(cached_bank, list) and cached_bank:
             existing_bank[stage] = cached_bank
@@ -548,6 +594,13 @@ Rules:
                     role_research = {}
                 role_research[stage] = cached_research
                 state["role_research"] = role_research
+            # Load cached stage_content
+            if isinstance(cached_content, str) and cached_content.strip():
+                stage_content_bank = state.get("generated_stage_content")
+                if not isinstance(stage_content_bank, dict):
+                    stage_content_bank = {}
+                    state["generated_stage_content"] = stage_content_bank
+                stage_content_bank[stage] = cached_content.strip()
             return
 
         provider = str(getattr(settings, "WEB_SEARCH_PROVIDER", "tavily") or "tavily").strip().lower()
@@ -578,12 +631,21 @@ Rules:
 
         stage_questions = generated_payload.get("questions")
         generated_checklist = generated_payload.get("onboarding_checklist")
+        stage_content = generated_payload.get("stage_content")
 
         if not isinstance(stage_questions, list) or not stage_questions:
             raise RuntimeError("questions missing from generation payload")
 
         existing_bank[stage] = stage_questions
         state["onboarding_checklist"] = generated_checklist if isinstance(generated_checklist, list) else []
+
+        # Store stage_content for use when presenting the stage
+        stage_content_bank = state.get("generated_stage_content")
+        if not isinstance(stage_content_bank, dict):
+            stage_content_bank = {}
+            state["generated_stage_content"] = stage_content_bank
+        if isinstance(stage_content, str) and stage_content.strip():
+            stage_content_bank[stage] = stage_content.strip()
 
         role_research = state.get("role_research")
         if not isinstance(role_research, dict):
@@ -618,6 +680,16 @@ Rules:
             value=role_research.get(stage),
             importance=2,
         )
+        # Save stage_content to long-term memory
+        if isinstance(stage_content, str) and stage_content.strip():
+            stage_content_key = f"stage_content.role:{self._normalize_role(role)}.stage:{stage}"
+            ltm.save_memory(
+                user_id=state["user_id"],
+                memory_type="onboarding_generated",
+                key=stage_content_key,
+                value=stage_content.strip(),
+                importance=3,
+            )
 
     @staticmethod
     def _tailored_guidance(stage: str, field_key: str, value: Any) -> str:
@@ -766,18 +838,25 @@ Rules:
                 # Per-stage caches: attempt to load any stage question lists already generated.
                 stage_banks: Dict[str, Any] = {}
                 stage_research: Dict[str, Any] = {}
+                stage_content_bank: Dict[str, str] = {}
                 for stage_key in ["department_info", "key_responsibilities", "tools_systems", "training_needs"]:
                     bank_key = self._generated_bank_cache_key(role_value, stage_key)
                     research_key = self._role_research_cache_key(role_value, stage_key)
+                    content_key = self._stage_content_cache_key(role_value, stage_key)
                     cached_bank = ltm.get_memory(state["user_id"], "onboarding_generated", bank_key)
                     cached_research = ltm.get_memory(state["user_id"], "onboarding_generated", research_key)
+                    cached_content = ltm.get_memory(state["user_id"], "onboarding_generated", content_key)
                     if isinstance(cached_bank, list) and cached_bank:
                         stage_banks[stage_key] = cached_bank
                     if isinstance(cached_research, dict) and cached_research:
                         stage_research[stage_key] = cached_research
+                    if isinstance(cached_content, str) and cached_content.strip():
+                        stage_content_bank[stage_key] = cached_content.strip()
 
                 if stage_banks:
                     state["generated_question_bank"] = stage_banks
+                if stage_content_bank:
+                    state["generated_stage_content"] = stage_content_bank
                 if isinstance(cached_checklist, list):
                     state["onboarding_checklist"] = cached_checklist
                 if stage_research:
@@ -1155,8 +1234,12 @@ Rules:
                         )
                         if next_stage_missing:
                             stage_intro = self._STAGE_INTRODUCTIONS.get(next_stage, "")
+                            # Include generated stage_content (actual responsibilities/info)
+                            stage_content_bank = state.get("generated_stage_content") or {}
+                            stage_content = stage_content_bank.get(next_stage, "")
                             next_question = next_stage_missing[0][1]
-                            state["response"] = f"{stage_intro}\n\n{next_question}".strip() if stage_intro else next_question
+                            parts = [p for p in [stage_intro, stage_content, next_question] if p.strip()]
+                            state["response"] = "\n\n".join(parts)
                         else:
                             state["response"] = "Moving to the next stage."
                         return state
@@ -1259,6 +1342,11 @@ Rules:
                         stage_intro = self._STAGE_INTRODUCTIONS.get(check_stage, "")
                         if stage_intro:
                             response_parts.append(stage_intro)
+                        # Include generated stage_content (actual responsibilities/info)
+                        stage_content_bank = state.get("generated_stage_content") or {}
+                        stage_content = stage_content_bank.get(check_stage, "")
+                        if stage_content.strip():
+                            response_parts.append(stage_content)
                     
                     if response_parts:
                         response_parts.append("")
@@ -1652,8 +1740,12 @@ Rules:
                             )
                             if next_stage_missing:
                                 stage_intro = self._STAGE_INTRODUCTIONS.get(next_stage, "")
+                                # Include generated stage_content (actual responsibilities/info)
+                                stage_content_bank = state.get("generated_stage_content") or {}
+                                stage_content = stage_content_bank.get(next_stage, "")
                                 next_question = next_stage_missing[0][1]
-                                state["response"] = f"{stage_intro}\n\n{next_question}".strip() if stage_intro else next_question
+                                parts = [p for p in [stage_intro, stage_content, next_question] if p.strip()]
+                                state["response"] = "\n\n".join(parts)
                             else:
                                 state["response"] = "Moving to the next stage."
                             return state
