@@ -24,7 +24,7 @@ This project is a **production-ready AI onboarding assistant** featuring:
 - 🤖 **Google Gemini AI** - Advanced LLM for natural conversations
 - 🔐 **Google OAuth** - Secure user authentication
 - 🧠 **Dual-Layer Memory** - Redis (short-term) + SQL (long-term)
-- 📚 **RAG System** - ChromaDB vector store with 14 internal rules documents
+- 📚 **RAG System** - ChromaDB vector store with 15 internal rules documents
 - 🔄 **LangGraph Agent** - 5-node agentic workflow for intelligent responses
 - 💬 **Advanced Chat with RAG** - Document retrieval with source citations
 - 📊 **Stage-Based Flow** - 5 onboarding stages with progress tracking
@@ -149,10 +149,9 @@ The AI Onboarding Assistant is a conversational AI agent designed to guide new u
 - **SQLAlchemy** - ORM for persistent storage
 - **Redis** - In-memory cache for session data (with in-memory fallback)
 
-**Authentication & Security:**
-- **python-jose** - JWT token handling
-- **passlib** - Password hashing with bcrypt
-- **python-multipart** - Form data parsing
+**Authentication:**
+- **google-auth-oauthlib** - Google OAuth 2.0 authentication
+- **google-auth** - Google authentication library
 
 **Frontend:**
 - **Streamlit** - Interactive web interface (2 versions)
@@ -236,7 +235,7 @@ Open your browser to `http://localhost:8501`
 - 🔐 Google OAuth authentication
 - 💬 Full RAG (Retrieval-Augmented Generation) with internal rules documents
 - 🔄 LangGraph agentic workflow
-- 📚 Document retrieval from 14 internal rules documents
+- 📚 Document retrieval from 15 internal rules documents
 - 📖 Source citations for transparency
 - 👨‍💼 Admin dashboard for managing users
 - 📊 Progress tracking through 5 onboarding stages
@@ -287,14 +286,14 @@ The assistant will:
 
 ### RAG System (Internal Rules Documents)
 
-The RAG system automatically loads 14 internal rules documents from the `../Internal rules/` folder:
+The RAG system automatically loads 15 internal rules documents from the `../Internal rules/` folder:
 
 ```python
 # Documents are loaded during initialization
 from backend.rag.initializer import load_internal_rules_documents
 
 docs = load_internal_rules_documents()
-# Returns 14 Document objects with metadata:
+# Returns 15 Document objects with metadata:
 # - origin: "internal_rules"
 # - source: filename
 # - category: "internal_rules"
@@ -498,55 +497,57 @@ streamlit run chat_app.py
 ```
 Onboarding_agent/
 ├── backend/
-│   ├── agent/           # LangGraph agentic workflow
+│   ├── agent/               # LangGraph agentic workflow
 │   │   ├── __init__.py
-│   │   ├── state.py     # Agent state definition
-│   │   ├── nodes.py     # Agent nodes (analyze, load memory, retrieve, respond, save)
-│   │   └── graph.py     # LangGraph workflow orchestration
-│   ├── auth/            # Google OAuth authentication
+│   │   ├── state.py         # Agent state definition
+│   │   ├── nodes.py         # Agent nodes (analyze, load memory, retrieve, respond, save)
+│   │   └── graph.py         # LangGraph workflow orchestration
+│   ├── auth/                # Google OAuth authentication
 │   │   ├── __init__.py
-│   │   ├── oauth.py     # Google OAuth handler
-│   │   └── service.py   # Authentication service layer
-│   ├── admin/           # Admin dashboard
+│   │   └── oauth.py         # Google OAuth handler
+│   ├── admin/               # Admin dashboard
 │   │   ├── __init__.py
-│   │   ├── dashboard.py # Admin UI components
-│   │   ├── queries.py   # Admin database queries
-│   │   └── utils.py     # Admin utilities
-│   ├── rag/             # RAG system components
+│   │   ├── dashboard.py     # Admin UI components
+│   │   ├── queries.py       # Admin database queries
+│   │   └── utils.py         # Admin utilities (document upload, user management)
+│   ├── rag/                 # RAG system components
 │   │   ├── __init__.py
-│   │   ├── vector_store.py      # ChromaDB integration
+│   │   ├── vector_store.py       # ChromaDB integration
 │   │   ├── document_processor.py # Text chunking & processing
-│   │   ├── query_planner.py     # Query analysis & planning
-│   │   ├── reranker.py          # Result reranking
-│   │   ├── agentic_rag.py       # Main RAG engine
-│   │   └── initializer.py       # RAG initialization (loads 14 internal rules docs)
-│   ├── memory/          # Dual-layer memory system
+│   │   ├── query_planner.py      # Query analysis & planning
+│   │   ├── reranker.py           # Result reranking
+│   │   ├── agentic_rag.py        # Main RAG engine
+│   │   └── initializer.py        # RAG initialization (loads internal rules docs)
+│   ├── memory/              # Dual-layer memory system
 │   │   ├── __init__.py
 │   │   ├── short_term.py    # Redis/in-memory session storage
 │   │   └── long_term.py     # SQL persistent storage
-│   ├── database/        # Database layer
+│   ├── database/            # Database layer
 │   │   ├── __init__.py
 │   │   ├── connection.py    # SQLAlchemy connection & session
 │   │   └── models.py        # Database models (6 tables)
-│   ├── models/          # Data models
+│   ├── models/              # Data models
 │   │   ├── __init__.py
 │   │   └── schemas.py       # Pydantic schemas (domain models)
 │   ├── __init__.py
-│   └── config.py        # Configuration management (Pydantic Settings)
-├── chat_app.py          # Main Streamlit chat with RAG + Agent + Admin Dashboard
-├── run_chat.sh          # Convenience script to start chat UI
-├── requirements.txt     # Python dependencies
-├── onboarding.db        # SQLite database (auto-created)
-├── README.md            # This file - comprehensive documentation
-├── AUTHENTICATION_GUIDE.md      # Google OAuth setup guide
-├── GMAIL_OAUTH_SETUP.md         # Detailed OAuth configuration
-├── ADMIN_PANEL_GUIDE.md         # Admin dashboard documentation
-├── .env.example         # Environment template
-├── .env                 # Your configuration (gitignored)
-└── .gitignore           # Git ignore patterns
+│   └── config.py            # Configuration management (Pydantic Settings)
+├── Internal rules/          # Uploaded documents via admin panel (user-uploaded)
+├── uploaded_profile_pics/   # User profile pictures
+├── chroma_db/               # ChromaDB vector store data
+├── chat_app.py              # Main Streamlit chat with RAG + Agent + Admin Dashboard
+├── run_chat.sh              # Convenience script to start chat UI
+├── requirements.txt         # Python dependencies
+├── onboarding.db            # SQLite database (auto-created)
+├── README.md                # This file - comprehensive documentation
+├── QUICKSTART.md            # Quick start guide
+├── GMAIL_OAUTH_SETUP.md     # Google OAuth setup guide
+├── ADMIN_PANEL_GUIDE.md     # Admin dashboard documentation
+├── .env.example             # Environment template
+├── .env                     # Your configuration (gitignored)
+└── .gitignore               # Git ignore patterns
 ```
 
-**Internal Rules Documents (14 files in `../Internal rules/`):**
+**Internal Rules Documents (15 files in `../Internal rules/` - project root):**
 - IT Administrator Responsibilities.md
 - IT Administrator – Yearly KPIs.md
 - IT Onboarding Credentials Guide.md
@@ -561,6 +562,7 @@ Onboarding_agent/
 - Security Incident Reporting and Response (Employee Guide).md
 - Workplace Safety and Facilities Rules.md
 - Google Workspace Setup Guide.md
+- Organization Structure.md
 
 ---
 

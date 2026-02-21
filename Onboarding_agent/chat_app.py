@@ -1451,7 +1451,9 @@ if _onboarding_complete:
 
     # Display extracted document links for non-admin users
     if not _is_admin:
-        _user_links = _extract_document_links_from_facts(_early_facts)
+        _links_from_facts = _extract_document_links_from_facts(_early_facts)
+        _links_from_msgs = _extract_document_links_from_messages(st.session_state.messages)
+        _user_links = _merge_links_by_stage(_links_from_facts, _links_from_msgs)
         if _user_links:
             st.markdown("### 📚 Resources by Stage")
             st.markdown("Click on any stage below to view the documents and links mentioned during your onboarding:")
@@ -1521,9 +1523,58 @@ if _onboarding_complete:
                             else:
                                 st.markdown(f"- {doc_name}")
                         
-                        # Show remaining plain text document references
+                        # Show remaining plain text document references - try to find and link them
+                        def _find_and_link_doc(doc_name: str) -> bool:
+                            """Find document and create clickable link. Returns True if found."""
+                            import base64
+                            doc_clean = doc_name.replace('.md', '').replace('.MD', '').strip()
+                            
+                            internal_rules_dirs = [
+                                Path(__file__).parent.parent / "Internal rules",
+                                Path(__file__).parent / "Internal rules",
+                            ]
+                            
+                            for rules_dir in internal_rules_dirs:
+                                if not rules_dir.exists():
+                                    continue
+                                
+                                # First try exact match
+                                exact_path = rules_dir / f"{doc_clean}.md"
+                                if exact_path.exists():
+                                    try:
+                                        pdf_content = _convert_to_pdf(str(exact_path))
+                                        if pdf_content and len(pdf_content) > 0:
+                                            pdf_b64 = base64.b64encode(pdf_content).decode()
+                                            st.markdown(
+                                                f'• <a href="data:application/pdf;base64,{pdf_b64}" target="_blank" style="color: #667eea; text-decoration: underline;">{doc_name}</a>',
+                                                unsafe_allow_html=True,
+                                            )
+                                            return True
+                                    except Exception as e:
+                                        logger.debug(f"PDF conversion failed for {exact_path}: {e}")
+                                
+                                # Fuzzy match - search all .md files
+                                for md_file in rules_dir.glob("*.md"):
+                                    file_stem_lower = md_file.stem.lower()
+                                    doc_lower = doc_clean.lower()
+                                    
+                                    if file_stem_lower == doc_lower or doc_lower in file_stem_lower or file_stem_lower in doc_lower:
+                                        try:
+                                            pdf_content = _convert_to_pdf(str(md_file))
+                                            if pdf_content and len(pdf_content) > 0:
+                                                pdf_b64 = base64.b64encode(pdf_content).decode()
+                                                st.markdown(
+                                                    f'• <a href="data:application/pdf;base64,{pdf_b64}" target="_blank" style="color: #667eea; text-decoration: underline;">{doc_name}</a>',
+                                                    unsafe_allow_html=True,
+                                                )
+                                                return True
+                                        except Exception as e:
+                                            logger.debug(f"PDF conversion failed for {md_file}: {e}")
+                            return False
+                        
                         for doc in plain_docs:
-                            st.markdown(f"- {doc}")
+                            if not _find_and_link_doc(doc):
+                                st.markdown(f"• {doc}")
             st.markdown("---")
         else:
             st.info("📚 No specific resources were mentioned during your onboarding. Use the search box below to find company policies and procedures.")
