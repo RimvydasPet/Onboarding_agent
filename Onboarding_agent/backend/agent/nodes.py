@@ -1627,8 +1627,42 @@ Rules:
                     )
                     if _is_question:
                         return self._handle_qa_question(state, current_stage, onboarding_facts)
+                    elif user_wants_move_on:
+                        # User wants to move on and stage is complete - advance to next stage
+                        next_stage = self._next_stage_for(current_stage)
+                        if next_stage and next_stage != "completed":
+                            state["next_stage"] = next_stage
+                            try:
+                                self._ensure_generated_question_bank(state, next_stage)
+                            except Exception as e:
+                                state["response"] = (
+                                    "I can't generate role-based onboarding questions for the next stage because the web-search/question-generation "
+                                    f"step failed: {type(e).__name__}: {e}\n\n"
+                                    "Please check:\n"
+                                    "- TAVILY_API_KEY is set\n"
+                                    "- GOOGLE_API_KEY is set\n"
+                                    "- GEMINI_MODEL is valid (e.g. models/gemini-2.0-flash)"
+                                )
+                                return state
+
+                            next_stage_missing = self._missing_fields(
+                                next_stage,
+                                onboarding_facts,
+                                generated_question_bank=state.get("generated_question_bank"),
+                            )
+                            if next_stage_missing:
+                                stage_intro = self._STAGE_INTRODUCTIONS.get(next_stage, "")
+                                next_question = next_stage_missing[0][1]
+                                state["response"] = f"{stage_intro}\n\n{next_question}".strip() if stage_intro else next_question
+                            else:
+                                state["response"] = "Moving to the next stage."
+                            return state
+
+                        state["next_stage"] = "completed"
+                        state["response"] = self._STAGE_INTRODUCTIONS.get("completed", "Congratulations! You've completed onboarding.")
+                        return state
                     else:
-                        state["response"] = "This stage is already complete. You can ask me questions about TechVenture Solutions, or I can help you with the next stage."
+                        state["response"] = "This stage is already complete. You can ask me questions about TechVenture Solutions, or say **'move on'** to continue to the next stage."
                         state["next_stage"] = None
                         logger.info("Stage complete message returned (input did not look like a question)")
                         return state
