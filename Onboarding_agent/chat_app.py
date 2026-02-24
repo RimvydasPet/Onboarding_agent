@@ -1237,7 +1237,43 @@ def _generate_user_onboarding_pdf(user_id: int, session_id: str, facts: dict, me
         pdf_cache_dir.mkdir(parents=True, exist_ok=True)
         target_pdf = pdf_cache_dir / f"{source_path.stem}.pdf"
         target_pdf.write_bytes(pdf_bytes)
+<<<<<<< HEAD
         return ""
+=======
+        return target_pdf.resolve().as_uri()
+
+    def _resolve_doc_ref_to_path(doc_ref: str) -> Path | None:
+        """Best-effort resolver for plain document names extracted from answers."""
+        ref = str(doc_ref or "").strip()
+        if not ref:
+            return None
+
+        candidate = Path(ref)
+        if candidate.exists():
+            return candidate.resolve()
+
+        cleaned = ref.replace(".md", "").replace(".MD", "").strip()
+        cleaned_lower = cleaned.lower()
+        internal_rules_dirs = [
+            Path(__file__).parent.parent / "Internal rules",
+            Path(__file__).parent / "Internal rules",
+        ]
+
+        for rules_dir in internal_rules_dirs:
+            if not rules_dir.exists():
+                continue
+
+            exact_path = rules_dir / f"{cleaned}.md"
+            if exact_path.exists():
+                return exact_path.resolve()
+
+            for md_file in rules_dir.glob("*.md"):
+                stem = md_file.stem.lower()
+                if stem == cleaned_lower or cleaned_lower in stem or stem in cleaned_lower:
+                    return md_file.resolve()
+
+        return None
+>>>>>>> a9a73004 (refactor document reference resolution in PDF generation to use Path-based approach, simplify file:// URL resolution by checking file existence directly before fuzzy matching in Internal rules directories, and streamline document link rendering logic)
 
     def _sanitize_text(text: str) -> str:
         """Remove raw URLs/URIs from visible text."""
@@ -1378,7 +1414,19 @@ def _generate_user_onboarding_pdf(user_id: int, session_id: str, facts: dict, me
             
             for doc_ref in sorted(set(links_data['docs'])):
                 if not _is_similar_doc_name_pdf(doc_ref.strip(), shown_doc_names):
+<<<<<<< HEAD
                     story.append(Paragraph(f"• {doc_ref.strip()}", body_style))
+=======
+                    doc_ref_text = doc_ref.strip().replace("&", "&amp;")
+                    resolved_doc_path = _resolve_doc_ref_to_path(doc_ref)
+                    if resolved_doc_path is not None:
+                        resolved_href = _pdf_href_for_url(resolved_doc_path.as_uri())
+                        if resolved_href:
+                            safe_url = resolved_href.replace("&", "&amp;")
+                            story.append(Paragraph(f'• <link href="{safe_url}" color="blue"><u>{doc_ref_text}</u></link>', body_style))
+                            continue
+                    story.append(Paragraph(f"• {doc_ref_text}", body_style))
+>>>>>>> a9a73004 (refactor document reference resolution in PDF generation to use Path-based approach, simplify file:// URL resolution by checking file existence directly before fuzzy matching in Internal rules directories, and streamline document link rendering logic)
         else:
             story.append(Paragraph("<i>No specific documents referenced for this stage.</i>", summary_style))
         
