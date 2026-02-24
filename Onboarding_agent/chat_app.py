@@ -1239,43 +1239,37 @@ def _generate_user_onboarding_pdf(user_id: int, session_id: str, facts: dict, me
         target_pdf.write_bytes(pdf_bytes)
         return target_pdf.resolve().as_uri()
 
-    def _resolve_doc_ref_to_file_url(doc_ref: str) -> str:
-        """Resolve plain document references to file:// URLs when possible."""
-        text = str(doc_ref or "").strip()
-        if not text:
-            return ""
+    def _resolve_doc_ref_to_path(doc_ref: str) -> Path | None:
+        """Best-effort resolver for plain document names extracted from answers."""
+        ref = str(doc_ref or "").strip()
+        if not ref:
+            return None
 
-        if text.startswith(("http://", "https://", "file://")):
-            return text
+        candidate = Path(ref)
+        if candidate.exists():
+            return candidate.resolve()
 
-        def _norm_name(value: str) -> str:
-            normalized = str(value or "").strip().lower()
-            normalized = normalized.replace("_", " ").replace("-", " ")
-            normalized = re.sub(r"\.(md|markdown|txt|pdf)$", "", normalized)
-            normalized = re.sub(r"\s+", " ", normalized)
-            return normalized.strip()
-
-        target = _norm_name(text)
-        if not target:
-            return ""
-
-        search_dirs = [
-            Path(__file__).resolve().parent.parent / "Internal rules",
-            Path(__file__).resolve().parent / "Internal rules",
+        cleaned = ref.replace(".md", "").replace(".MD", "").strip()
+        cleaned_lower = cleaned.lower()
+        internal_rules_dirs = [
+            Path(__file__).parent.parent / "Internal rules",
+            Path(__file__).parent / "Internal rules",
         ]
 
-        for rules_dir in search_dirs:
+        for rules_dir in internal_rules_dirs:
             if not rules_dir.exists():
                 continue
 
-            for candidate in rules_dir.glob("*.*"):
-                if candidate.suffix.lower() not in {".md", ".markdown", ".txt", ".pdf"}:
-                    continue
-                cand_norm = _norm_name(candidate.stem)
-                if cand_norm == target or target in cand_norm or cand_norm in target:
-                    return candidate.resolve().as_uri()
+            exact_path = rules_dir / f"{cleaned}.md"
+            if exact_path.exists():
+                return exact_path.resolve()
 
-        return ""
+            for md_file in rules_dir.glob("*.md"):
+                stem = md_file.stem.lower()
+                if stem == cleaned_lower or cleaned_lower in stem or stem in cleaned_lower:
+                    return md_file.resolve()
+
+        return None
 
     def _sanitize_text(text: str) -> str:
         """Remove raw URLs/URIs from visible text."""
@@ -1416,18 +1410,15 @@ def _generate_user_onboarding_pdf(user_id: int, session_id: str, facts: dict, me
             
             for doc_ref in sorted(set(links_data['docs'])):
                 if not _is_similar_doc_name_pdf(doc_ref.strip(), shown_doc_names):
-                    clean_doc_ref = doc_ref.strip()
-                    doc_url = _resolve_doc_ref_to_file_url(clean_doc_ref)
-                    if doc_url:
-                        resolved_doc_href = _pdf_href_for_url(doc_url)
-                        if resolved_doc_href:
-                            safe_doc_href = resolved_doc_href.replace("&", "&amp;")
-                            safe_doc_label = clean_doc_ref.replace("&", "&amp;")
-                            story.append(Paragraph(f'• <link href="{safe_doc_href}" color="blue"><u>{safe_doc_label}</u></link>', body_style))
-                            shown_doc_names.add(clean_doc_ref.lower().replace('_', ' ').replace('-', ' ').replace('.pdf', '').replace('.md', ''))
+                    doc_ref_text = doc_ref.strip().replace("&", "&amp;")
+                    resolved_doc_path = _resolve_doc_ref_to_path(doc_ref)
+                    if resolved_doc_path is not None:
+                        resolved_href = _pdf_href_for_url(resolved_doc_path.as_uri())
+                        if resolved_href:
+                            safe_url = resolved_href.replace("&", "&amp;")
+                            story.append(Paragraph(f'• <link href="{safe_url}" color="blue"><u>{doc_ref_text}</u></link>', body_style))
                             continue
-
-                    story.append(Paragraph(f"• {clean_doc_ref}", body_style))
+                    story.append(Paragraph(f"• {doc_ref_text}", body_style))
         else:
             story.append(Paragraph("<i>No specific documents referenced for this stage.</i>", summary_style))
         
