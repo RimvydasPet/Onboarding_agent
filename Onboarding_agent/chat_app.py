@@ -1227,7 +1227,7 @@ def _generate_user_onboarding_pdf(user_id: int, session_id: str, facts: dict, me
             return f"{public_base}/{quote(source_path.name)}"
 
         if source_path.suffix.lower() == ".pdf":
-            return ""
+            return source_path.resolve().as_uri()
 
         pdf_bytes = _convert_to_pdf(str(source_path))
         if not pdf_bytes:
@@ -1237,6 +1237,44 @@ def _generate_user_onboarding_pdf(user_id: int, session_id: str, facts: dict, me
         pdf_cache_dir.mkdir(parents=True, exist_ok=True)
         target_pdf = pdf_cache_dir / f"{source_path.stem}.pdf"
         target_pdf.write_bytes(pdf_bytes)
+        return target_pdf.resolve().as_uri()
+
+    def _resolve_doc_ref_to_file_url(doc_ref: str) -> str:
+        """Resolve plain document references to file:// URLs when possible."""
+        text = str(doc_ref or "").strip()
+        if not text:
+            return ""
+
+        if text.startswith(("http://", "https://", "file://")):
+            return text
+
+        def _norm_name(value: str) -> str:
+            normalized = str(value or "").strip().lower()
+            normalized = normalized.replace("_", " ").replace("-", " ")
+            normalized = re.sub(r"\.(md|markdown|txt|pdf)$", "", normalized)
+            normalized = re.sub(r"\s+", " ", normalized)
+            return normalized.strip()
+
+        target = _norm_name(text)
+        if not target:
+            return ""
+
+        search_dirs = [
+            Path(__file__).resolve().parent.parent / "Internal rules",
+            Path(__file__).resolve().parent / "Internal rules",
+        ]
+
+        for rules_dir in search_dirs:
+            if not rules_dir.exists():
+                continue
+
+            for candidate in rules_dir.glob("*.*"):
+                if candidate.suffix.lower() not in {".md", ".markdown", ".txt", ".pdf"}:
+                    continue
+                cand_norm = _norm_name(candidate.stem)
+                if cand_norm == target or target in cand_norm or cand_norm in target:
+                    return candidate.resolve().as_uri()
+
         return ""
 
     def _sanitize_text(text: str) -> str:
@@ -1378,7 +1416,18 @@ def _generate_user_onboarding_pdf(user_id: int, session_id: str, facts: dict, me
             
             for doc_ref in sorted(set(links_data['docs'])):
                 if not _is_similar_doc_name_pdf(doc_ref.strip(), shown_doc_names):
-                    story.append(Paragraph(f"• {doc_ref.strip()}", body_style))
+                    clean_doc_ref = doc_ref.strip()
+                    doc_url = _resolve_doc_ref_to_file_url(clean_doc_ref)
+                    if doc_url:
+                        resolved_doc_href = _pdf_href_for_url(doc_url)
+                        if resolved_doc_href:
+                            safe_doc_href = resolved_doc_href.replace("&", "&amp;")
+                            safe_doc_label = clean_doc_ref.replace("&", "&amp;")
+                            story.append(Paragraph(f'• <link href="{safe_doc_href}" color="blue"><u>{safe_doc_label}</u></link>', body_style))
+                            shown_doc_names.add(clean_doc_ref.lower().replace('_', ' ').replace('-', ' ').replace('.pdf', '').replace('.md', ''))
+                            continue
+
+                    story.append(Paragraph(f"• {clean_doc_ref}", body_style))
         else:
             story.append(Paragraph("<i>No specific documents referenced for this stage.</i>", summary_style))
         
