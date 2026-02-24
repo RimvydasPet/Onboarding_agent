@@ -5,7 +5,7 @@ from backend.agent.graph import run_agent
 from backend.rag.initializer import initialize_rag_system
 from backend.database.connection import init_db
 from backend.database.connection import get_db
-from backend.database.models import OnboardingProfileDB, UserDB
+from backend.database.models import ConversationDB, MessageDB, OnboardingProfileDB, UserDB
 from backend.models.schemas import OnboardingStage
 from backend.config import settings
 from backend.memory.long_term import LongTermMemory
@@ -513,6 +513,130 @@ if "user_picture" not in st.session_state:
     st.session_state.user_picture = ""
 
 
+def _persist_message_to_db(user_id: int, session_id: str, message: dict, chat_mode: str = "onboarding") -> None:
+    """Persist a UI chat message into the conversations/messages tables."""
+    try:
+        role = str(message.get("role") or "").strip()
+        content = str(message.get("content") or "").strip()
+        if not role or not content:
+            return
+
+        db = next(get_db())
+        conversation = db.query(ConversationDB).filter(
+            ConversationDB.session_id == session_id
+        ).first()
+
+        if not conversation:
+            conversation = ConversationDB(user_id=user_id, session_id=session_id)
+            db.add(conversation)
+            db.flush()
+
+        message_metadata = {
+            "chat_mode": chat_mode,
+        }
+        stage = message.get("stage")
+        if isinstance(stage, str) and stage.strip():
+            message_metadata["stage"] = stage
+
+        sources = message.get("sources")
+        if isinstance(sources, list):
+            message_metadata["sources"] = sources
+
+        ui_timestamp = message.get("timestamp")
+        if isinstance(ui_timestamp, str) and ui_timestamp:
+            message_metadata["ui_timestamp"] = ui_timestamp
+
+        parsed_timestamp = None
+        if isinstance(ui_timestamp, str) and ui_timestamp:
+            try:
+                parsed_timestamp = datetime.fromisoformat(ui_timestamp)
+            except ValueError:
+                parsed_timestamp = None
+
+        db_message = MessageDB(
+            conversation_id=conversation.id,
+            role=role,
+            content=content,
+            message_metadata=message_metadata,
+            timestamp=parsed_timestamp or datetime.utcnow(),
+        )
+        db.add(db_message)
+        conversation.updated_at = datetime.utcnow()
+        db.commit()
+    except Exception as e:
+        logger.warning(f"Could not persist message to DB: {e}")
+
+
+def _load_latest_conversation_state(user_id: int) -> dict | None:
+    """Load latest persisted conversation and split messages by chat mode."""
+    try:
+        db = next(get_db())
+        conversation = db.query(ConversationDB).filter(
+            ConversationDB.user_id == user_id
+        ).order_by(ConversationDB.updated_at.desc(), ConversationDB.id.desc()).first()
+
+        if not conversation:
+            return None
+
+        rows = db.query(MessageDB).filter(
+            MessageDB.conversation_id == conversation.id
+        ).order_by(MessageDB.timestamp.asc(), MessageDB.id.asc()).all()
+
+        onboarding_messages = []
+        document_search_messages = []
+        for row in rows:
+            meta = row.message_metadata if isinstance(row.message_metadata, dict) else {}
+            msg = {
+                "role": row.role,
+                "content": row.content,
+                "timestamp": (row.timestamp.isoformat() if row.timestamp else datetime.utcnow().isoformat()),
+            }
+            if isinstance(meta.get("stage"), str) and meta.get("stage"):
+                msg["stage"] = meta["stage"]
+            if isinstance(meta.get("sources"), list):
+                msg["sources"] = meta["sources"]
+
+            mode = str(meta.get("chat_mode") or "onboarding").strip().lower()
+            if mode == "document_search":
+                document_search_messages.append(msg)
+            else:
+                onboarding_messages.append(msg)
+
+        current_stage = "welcome"
+        for msg in reversed(onboarding_messages):
+            stage = msg.get("stage")
+            if isinstance(stage, str) and stage:
+                current_stage = stage
+                break
+
+        return {
+            "session_id": conversation.session_id,
+            "messages": onboarding_messages,
+            "ds_messages": document_search_messages,
+            "current_stage": current_stage,
+        }
+    except Exception as e:
+        logger.warning(f"Could not load persisted conversation state: {e}")
+        return None
+
+
+def _append_and_persist_message(message: dict, *, target_key: str = "messages", chat_mode: str = "onboarding") -> None:
+    if target_key not in st.session_state or not isinstance(st.session_state.get(target_key), list):
+        st.session_state[target_key] = []
+
+    st.session_state[target_key].append(message)
+
+    user_id = st.session_state.get("user_id")
+    session_id = st.session_state.get("session_id")
+    if isinstance(user_id, int) and session_id:
+        _persist_message_to_db(
+            user_id=user_id,
+            session_id=str(session_id),
+            message=message,
+            chat_mode=chat_mode,
+        )
+
+
 # Handle OAuth callback
 _handle_oauth_callback()
 
@@ -585,8 +709,22 @@ with st.sidebar:
             st.session_state.user_name = ""
             st.session_state.user_picture = ""
             st.session_state.access_token = None
+            st.session_state.persisted_state_loaded_for_user = None
             st.rerun()
     st.markdown("---")
+
+if st.session_state.get("persisted_state_loaded_for_user") != st.session_state.user_id:
+    _restored_state = _load_latest_conversation_state(st.session_state.user_id)
+    if _restored_state:
+        st.session_state.session_id = _restored_state["session_id"]
+        st.session_state.messages = _restored_state["messages"]
+        st.session_state.ds_messages = _restored_state["ds_messages"]
+        if st.session_state.messages:
+            st.session_state.current_stage = _restored_state.get("current_stage", "welcome")
+            st.session_state.onboarding_started = True
+        elif st.session_state.ds_messages:
+            st.session_state.current_stage = "completed"
+    st.session_state.persisted_state_loaded_for_user = st.session_state.user_id
 
 
 ROLE_STAGE_FIELDS = {
@@ -1665,11 +1803,11 @@ if _onboarding_complete:
     _ds_input = st.chat_input("Search internal rules and policies...")
 
     if _ds_input:
-        st.session_state.ds_messages.append({
+        _append_and_persist_message({
             "role": "user",
             "content": _ds_input,
             "timestamp": datetime.now().isoformat(),
-        })
+        }, target_key="ds_messages", chat_mode="document_search")
 
         with st.spinner("🔍 Searching internal documents..."):
             try:
@@ -1683,20 +1821,20 @@ if _onboarding_complete:
                         for m in st.session_state.ds_messages[-6:]
                     ],
                 )
-                st.session_state.ds_messages.append({
+                _append_and_persist_message({
                     "role": "assistant",
                     "content": _ds_result["response"],
                     "sources": _ds_result.get("sources", []),
                     "timestamp": datetime.now().isoformat(),
-                })
+                }, target_key="ds_messages", chat_mode="document_search")
             except Exception as e:
                 logger.error(f"Document search error: {e}")
-                st.session_state.ds_messages.append({
+                _append_and_persist_message({
                     "role": "assistant",
                     "content": f"Sorry, I encountered an error while searching: {e}",
                     "sources": [],
                     "timestamp": datetime.now().isoformat(),
-                })
+                }, target_key="ds_messages", chat_mode="document_search")
         st.rerun()
 
 
@@ -1974,6 +2112,16 @@ if _dev_is_admin:
             ltm = LongTermMemory(db)
             ltm.clear_user_memories(st.session_state.user_id)
             ltm.reset_onboarding_profile(st.session_state.user_id)
+
+            user_conversations = db.query(ConversationDB).filter(
+                ConversationDB.user_id == st.session_state.user_id
+            ).all()
+            for conv in user_conversations:
+                db.query(MessageDB).filter(MessageDB.conversation_id == conv.id).delete()
+            db.query(ConversationDB).filter(
+                ConversationDB.user_id == st.session_state.user_id
+            ).delete()
+            db.commit()
         except Exception as e:
             logger.warning(f"Could not clear long-term memory: {e}")
         
@@ -1985,6 +2133,7 @@ if _dev_is_admin:
         
         st.session_state.session_id = str(uuid.uuid4())
         st.session_state.messages = []
+        st.session_state.ds_messages = []
         st.session_state.current_stage = "welcome"
         st.session_state.unlocked_stages = {"welcome"}
         st.session_state.onboarding_started = False
@@ -2072,7 +2221,7 @@ if has_existing_progress and not st.session_state.messages and not st.session_st
                 current_stage=st.session_state.current_stage,
             )
 
-            st.session_state.messages.append({
+            _append_and_persist_message({
                 "role": "assistant",
                 "content": result["response"],
                 "stage": result.get("next_stage") or st.session_state.current_stage,
@@ -2261,7 +2410,7 @@ if has_existing_progress or st.session_state.onboarding_started:
 if user_input:
     previous_stage = st.session_state.current_stage
 
-    st.session_state.messages.append({
+    _append_and_persist_message({
         "role": "user",
         "content": user_input,
         "stage": previous_stage,
@@ -2290,7 +2439,7 @@ if user_input:
                 st.session_state.current_stage = next_stage
                 st.session_state.unlocked_stages.add(next_stage)
             
-            st.session_state.messages.append({
+            _append_and_persist_message({
                 "role": "assistant",
                 "content": result["response"],
                 "stage": st.session_state.current_stage,
@@ -2315,7 +2464,7 @@ if user_input:
             
         except Exception as e:
             logger.error(f"Error: {e}")
-            st.session_state.messages.append({
+            _append_and_persist_message({
                 "role": "assistant",
                 "content": f"I apologize, but I encountered an error: {str(e)}",
                 "stage": previous_stage,
@@ -2341,7 +2490,7 @@ if _is_revisiting_stage and not st.session_state.revisit_message_shown and len(s
                 current_stage=st.session_state.current_stage
             )
             
-            st.session_state.messages.append({
+            _append_and_persist_message({
                 "role": "assistant",
                 "content": result["response"],
                 "stage": st.session_state.current_stage,
@@ -2389,7 +2538,7 @@ if len(st.session_state.messages) == 0:
                         current_stage=st.session_state.current_stage
                     )
                     
-                    st.session_state.messages.append({
+                    _append_and_persist_message({
                         "role": "assistant",
                         "content": result["response"],
                         "stage": st.session_state.current_stage,
