@@ -2349,7 +2349,7 @@ if len(st.session_state.messages) == 0:
             <div style="text-align: center; padding: 2rem;">
                 <h2>👋 Welcome to TechVenture Solutions!</h2>
                 <p style="font-size: 1.2rem; font-style: italic; color: #667eea; margin: 1.5rem 0;">
-                    "Success is not final, failure is not fatal: it is the courage to continue that counts." - Winston Churchill
+                    "A journey of a thousand miles begins with a single step" - Lao Tzu
                 </p>
                 <p style="font-size: 1rem; color: #666; margin: 1.5rem 0;">
                     I'm your AI onboarding assistant. Please take a moment to read this introduction.
