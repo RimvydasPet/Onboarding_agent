@@ -14,6 +14,7 @@ from datetime import datetime
 from datetime import timedelta
 from sqlalchemy.orm import Session
 from backend.database.models import UserDB, OnboardingProfileDB
+from backend.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -436,28 +437,41 @@ class AdminUtils:
                 return str(url)
 
             def pdf_href_for_url(url: str) -> str:
-                """Prefer PDF targets for local files so links open as documents."""
+                """Resolve links to user-accessible HTTP targets when configured."""
                 from html import escape
-                from urllib.parse import urlparse, unquote
+                from urllib.parse import urlparse, unquote, quote
 
                 parsed = urlparse(str(url))
+                if parsed.scheme in ("http", "https"):
+                    return str(url)
+
+                public_base = str(getattr(settings, "DOCUMENTS_PUBLIC_BASE_URL", "") or "").strip().rstrip("/")
+
                 if parsed.scheme != "file":
                     return str(url)
 
-                source_path = Path(unquote(parsed.path))
+                raw_path = unquote(parsed.path or "")
+                if parsed.netloc:
+                    raw_path = f"//{parsed.netloc}{raw_path}"
+                if len(raw_path) >= 3 and raw_path[0] == "/" and raw_path[2] == ":":
+                    raw_path = raw_path[1:]
+                source_path = Path(raw_path)
                 if not source_path.exists():
-                    return str(url)
+                    return ""
+
+                if public_base:
+                    return f"{public_base}/{quote(source_path.name)}"
 
                 if source_path.suffix.lower() == ".pdf":
-                    return source_path.resolve().as_uri()
+                    return ""
 
                 if source_path.suffix.lower() not in {".md", ".markdown", ".txt"}:
-                    return str(url)
+                    return ""
 
                 try:
                     content = source_path.read_text(encoding="utf-8", errors="replace")
                     if not content.strip():
-                        return str(url)
+                        return ""
 
                     cache_dir = Path(__file__).resolve().parent / "generated_resource_pdfs"
                     cache_dir.mkdir(parents=True, exist_ok=True)
@@ -483,10 +497,10 @@ class AdminUtils:
                     temp_doc.build(temp_story)
                     temp_buffer.seek(0)
                     target_pdf.write_bytes(temp_buffer.read())
-                    return target_pdf.resolve().as_uri()
+                    return ""
                 except Exception as conversion_error:
                     logger.warning(f"Could not convert link target to PDF for {source_path}: {conversion_error}")
-                    return str(url)
+                    return ""
 
             # ── Title ──────────────────────────────────────────────
             full_name = onboarding_data.get("full_name") or facts.get("welcome.name", "N/A")
@@ -594,15 +608,19 @@ class AdminUtils:
                         return False
                     
                     for url in urls:
-                        safe_url = pdf_href_for_url(url).replace("&", "&amp;")
                         link_text = link_label(url).replace("&", "&amp;")
                         shown_doc_names.add(link_text.lower().replace('_', ' ').replace('-', ' ').replace('.pdf', '').replace('.md', ''))
-                        story.append(
-                            Paragraph(
-                                f'• <link href="{safe_url}" color="blue"><u>{link_text}</u></link>',
-                                normal_style,
+                        resolved_href = pdf_href_for_url(url)
+                        if resolved_href:
+                            safe_url = resolved_href.replace("&", "&amp;")
+                            story.append(
+                                Paragraph(
+                                    f'• <link href="{safe_url}" color="blue"><u>{link_text}</u></link>',
+                                    normal_style,
+                                )
                             )
-                        )
+                        else:
+                            story.append(Paragraph(f"• {link_text}", normal_style))
 
                     # Filter out plain text docs that match URL document names
                     for doc_name in docs:

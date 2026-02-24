@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     APP_NAME: str = "Onboarding Agent"
     DEBUG: bool = True
     ALLOWED_ORIGINS: str = "http://localhost:3000,http://localhost:5173"
+    DOCUMENTS_PUBLIC_BASE_URL: str = ""
     
     CHROMA_PERSIST_DIRECTORY: str = "./chroma_db"
     EMBEDDING_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"

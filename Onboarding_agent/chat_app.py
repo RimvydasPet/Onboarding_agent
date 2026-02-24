@@ -1069,29 +1069,37 @@ def _generate_user_onboarding_pdf(user_id: int, session_id: str, facts: dict, me
         return str(url)
 
     def _pdf_href_for_url(url: str) -> str:
-        """Convert local file:// links to PDF targets for better click-open behavior."""
-        from urllib.parse import urlparse, unquote
+        """Resolve document links to user-accessible HTTP targets when configured."""
+        from urllib.parse import urlparse, quote
 
         parsed = urlparse(str(url))
+        if parsed.scheme in ("http", "https"):
+            return str(url)
+
+        public_base = str(getattr(settings, "DOCUMENTS_PUBLIC_BASE_URL", "") or "").strip().rstrip("/")
+
         if parsed.scheme != "file":
             return str(url)
 
-        source_path = Path(unquote(parsed.path))
+        source_path = _path_from_file_url(url)
         if not source_path.exists():
-            return str(url)
+            return ""
+
+        if public_base:
+            return f"{public_base}/{quote(source_path.name)}"
 
         if source_path.suffix.lower() == ".pdf":
-            return source_path.resolve().as_uri()
+            return ""
 
         pdf_bytes = _convert_to_pdf(str(source_path))
         if not pdf_bytes:
-            return str(url)
+            return ""
 
         pdf_cache_dir = Path(__file__).resolve().parent / "generated_resource_pdfs"
         pdf_cache_dir.mkdir(parents=True, exist_ok=True)
         target_pdf = pdf_cache_dir / f"{source_path.stem}.pdf"
         target_pdf.write_bytes(pdf_bytes)
-        return target_pdf.resolve().as_uri()
+        return ""
 
     def _sanitize_text(text: str) -> str:
         """Remove raw URLs/URIs from visible text."""
@@ -1221,10 +1229,14 @@ def _generate_user_onboarding_pdf(user_id: int, session_id: str, facts: dict, me
             shown_doc_names = set()
             
             for url in sorted(set(links_data['urls'])):
-                safe_url = _pdf_href_for_url(url).replace("&", "&amp;")
                 link_text = _link_label(url).replace("&", "&amp;")
                 shown_doc_names.add(link_text.lower().replace('_', ' ').replace('-', ' ').replace('.pdf', '').replace('.md', ''))
-                story.append(Paragraph(f'• <link href="{safe_url}" color="blue"><u>{link_text}</u></link>', body_style))
+                resolved_href = _pdf_href_for_url(url)
+                if resolved_href:
+                    safe_url = resolved_href.replace("&", "&amp;")
+                    story.append(Paragraph(f'• <link href="{safe_url}" color="blue"><u>{link_text}</u></link>', body_style))
+                else:
+                    story.append(Paragraph(f"• {link_text}", body_style))
             
             for doc_ref in sorted(set(links_data['docs'])):
                 if not _is_similar_doc_name_pdf(doc_ref.strip(), shown_doc_names):
