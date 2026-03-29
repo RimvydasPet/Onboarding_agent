@@ -15,8 +15,6 @@ An intelligent onboarding assistant, powered by Google Gemini AI and featuring d
 - [Project Structure](#project-structure)
 - [Contributing](#contributing)
 
----
-
 ## 🎯 Quick Overview
 
 This project is a **production-ready AI onboarding assistant** featuring:
@@ -29,8 +27,6 @@ This project is a **production-ready AI onboarding assistant** featuring:
 - 💬 **Advanced Chat with RAG** - Document retrieval with source citations
 - 📊 **Stage-Based Flow** - 5 onboarding stages with progress tracking
 - 👨‍💼 **Admin Dashboard** - Manage users and view onboarding statistics
-
----
 
 ## 🎯 Agent Purpose
 
@@ -58,8 +54,6 @@ The AI Onboarding Assistant is a conversational AI agent designed to guide new u
 2. **Product Teams**: Organizations wanting to improve their onboarding experience
 3. **Customer Success Teams**: Support teams looking to automate repetitive onboarding tasks
 4. **SaaS Companies**: Businesses with complex products requiring guided onboarding
-
----
 
 ## ✨ Features
 
@@ -101,8 +95,6 @@ The AI Onboarding Assistant is a conversational AI agent designed to guide new u
 - Conversation history integration
 - User preference tracking
 - Personalised recommendations
-
----
 
 ## 🏗️ Architecture
 
@@ -163,8 +155,6 @@ The AI Onboarding Assistant is a conversational AI agent designed to guide new u
 **Core:**
 - **Python 3.11+** - Core programming language
 
----
-
 ## 🚀 Installation
 
 ### Prerequisites
@@ -217,8 +207,6 @@ sudo systemctl start redis
 **Windows:**
 Download from https://redis.io/download
 
----
-
 ## 💻 Usage
 
 ### Quick Start
@@ -253,23 +241,23 @@ The interface will show:
 Once the app is running, try asking questions about internal company policies:
 
 **IT Administrator Questions:**
-- "What is IT Administrator's Responsibilities?"
+- "What are an IT Administrator's Responsibilities?"
 - "What are IT Administrator KPIs?"
-- "Explain IT onboarding credentials"
+- "Explain IT onboarding credentials."
 
 **Work Policy Questions:**
 - "What are remote and hybrid work guidelines?"
-- "Explain work environment requirements"
+- "Explain work environment requirements."
 - "What is the employee code of conduct?"
 
 **Security Questions:**
-- "What is endpoint security baseline?"
+- "What is an endpoint security baseline?"
 - "How do I report a security incident?"
 - "What are data classification standards?"
 
 **HR & Benefits Questions:**
 - "What are leave and time off policies?"
-- "Explain travel and expense reimbursement"
+- "Explain travel and expense reimbursement."
 - "What workplace safety rules apply?"
 
 The assistant will:
@@ -279,8 +267,6 @@ The assistant will:
 - Track your progress through the onboarding stages
 - Save important preferences to long-term memory
 - Show sources for transparency with document names and relevance scores
-
----
 
 ## 🔧 Technical Implementation
 
@@ -374,8 +360,6 @@ ADMIN_EMAILS=admin@company.com,manager@company.com
 
 Configuration is loaded via `backend/config.py` using Pydantic Settings with automatic validation.
 
----
-
 ## 📚 Documentation
 
 ### Database Schema
@@ -406,35 +390,6 @@ Configuration is loaded via `backend/config.py` using Pydantic Settings with aut
 - **Flexibility**: Different storage for different use cases
 - **Scalability**: Can scale each layer independently
 
----
-
-## ✅ Task Requirements Coverage
-
-### 1. Agent Purpose ✅
-- ✅ Clear purpose defined: Onboarding assistance for new users
-- ✅ Usefulness explained: Reduces support load, improves retention
-- ✅ Target users identified: New users, product teams, support teams
-
-### 2. Core Functionality ✅
-- ✅ Main features implemented: Conversational AI, memory systems, stage management
-- ✅ Primary tasks effective: Answers questions, guides onboarding
-- ✅ User interactions included: Chat interface, progress tracking
-
-### 3. User Interface ✅
-- ✅ User-friendly interface: Streamlit chat app with clean design
-- ✅ Intuitive and easy to use: Clear conversation flow, visual progress
-- ✅ All functionalities accessible: Chat, sources, progress, settings
-
-### 4. Technical Implementation ✅
-- ✅ Appropriate tools: Google Gemini, Streamlit, SQLAlchemy, Redis
-- ✅ Error handling: Redis fallback, API error handling, validation
-- ✅ Real-world usage: Session management, persistence, scalability
-
-### 5. Documentation ✅
-- ✅ Clear usage documentation: Installation, usage, examples
-- ✅ Common use cases included
-- ✅ Technical decisions: Architecture rationale explained
-
 ### Implementation Status
 
 #### ✅ Completed Features
@@ -444,8 +399,6 @@ Configuration is loaded via `backend/config.py` using Pydantic Settings with aut
 - **Session Management**: Unique session IDs and context preservation
 - **Error Handling**: Graceful degradation and user-friendly messages
 - **Progress Visualization**: Real-time metrics and stage indicators
-
----
 
 ## 🧪 Testing
 
@@ -469,8 +422,8 @@ streamlit run chat_app.py
    - View progress in the sidebar
 
 4. **Test RAG Document Retrieval:**
-   - Ask: "What is IT Administrator's Responsibilities?"
-   - Ask: "Explain work environment"
+   - Ask: "What are the IT Administrator's Responsibilities?"
+   - Ask: "Explain work environment."
    - Ask: "What are remote and hybrid work guidelines?"
    - Verify sources are shown with document names and relevance scores
 
@@ -481,7 +434,7 @@ streamlit run chat_app.py
    - View system configuration
 
 6. **Test Memory Systems:**
-   - Ask follow-up questions to verify the conversation history is remembered
+   - Ask follow-up questions to verify that the conversation history is remembered
    - Complete a stage and revisit it to see saved progress
    - Check that user preferences are preserved across sessions
 
@@ -490,7 +443,7 @@ streamlit run chat_app.py
    - Verify old conversation history is cleared
    - Confirm onboarding progress is maintained
 
----
+
 
 ## 📊 Project Structure
 
@@ -564,25 +517,7 @@ Onboarding_agent/
 - Google Workspace Setup Guide.md
 - Organisation Structure.md
 
----
-
 ## 🤝 Contributing
 
 This is a student project for the Turing College AI Engineering course. 
 
----
-
-## 📄 License
-
-Educational project - Turing College
-
----
-
-## 🙏 Acknowledgments
-
-- **LangChain**: LLM integration framework
-- **Google Gemini**: LLM capabilities
-- **Streamlit**: Rapid UI development
-- **SQLAlchemy**: Database ORM
-
----
