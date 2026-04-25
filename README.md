@@ -100,7 +100,7 @@ The AI Onboarding Assistant is a conversational AI agent designed to guide new u
 
 ### System Components
 
-```
+
 ┌─────────────────────────────────────────────────────────────┐
 │                  Streamlit Chat Interface                    │
 │         Beautiful UI with Progress Tracking                  │
@@ -122,7 +122,7 @@ The AI Onboarding Assistant is a conversational AI agent designed to guide new u
 │   In-Memory)   │ │            │ │ - Profiles   │
 │                │ │            │ │ - Messages   │
 └────────────────┘ └────────────┘ └──────────────┘
-```
+
 
 ### Technology Stack
 
@@ -165,44 +165,44 @@ The AI Onboarding Assistant is a conversational AI agent designed to guide new u
 
 ### Step 1: Clone Repository
 
-```bash
+bash
 git clone <repository-url>
 cd Onboarding_agent
 git checkout feature/complete-onboarding-agent
-```
+
 
 ### Step 2: Install Dependencies
 
-```bash
+bash
 pip install -r requirements.txt
-```
+
 
 ### Step 3: Configure Environment
 
-```bash
+bash
 cp .env.example .env
-```
+
 
 Edit `.env` and add your Google API key from https://aistudio.google.com/app/apikey:
 
-```env
+env
 GOOGLE_API_KEY=your_google_api_key_here
 SECRET_KEY=your-secret-key-change-in-production
-```
+
 
 ### Step 4: (Optional) Install Redis
 
 **macOS:**
-```bash
+bash
 brew install redis
 brew services start redis
-```
+
 
 **Linux:**
-```bash
+bash
 sudo apt-get install redis-server
 sudo systemctl start redis
-```
+
 
 **Windows:**
 Download from https://redis.io/download
@@ -213,9 +213,9 @@ Download from https://redis.io/download
 
 #### Start the Chat Application
 
-```bash
+bash
 streamlit run chat_app.py
-```
+
 
 Open your browser to `http://localhost:8501`
 
@@ -274,7 +274,7 @@ The assistant will:
 
 The RAG system automatically loads 15 internal rules documents from the `../Internal rules/` folder:
 
-```python
+python
 # Documents are loaded during initialisation
 from the backend. rag. initialiser import load_internal_rules_documents
 
@@ -283,7 +283,7 @@ docs = load_internal_rules_documents()
 # - origin: "internal_rules"
 # - source: filename
 # - category: "internal_rules"
-```
+
 
 **Key Features:**
 - Automatic document discovery from the Internal rules folder
@@ -295,7 +295,7 @@ docs = load_internal_rules_documents()
 ### Memory Integration
 
 #### Short-Term Memory (Session Context)
-```python
+python
 # Save conversation
 short_term_memory.save_message(session_id, "user", message)
 short_term_memory.save_context(session_id, {"intent": "help"})
@@ -303,10 +303,10 @@ short_term_memory.save_context(session_id, {"intent": "help"})
 # Retrieve recent context
 messages = short_term_memory.get_messages(session_id, limit=5)
 context = short_term_memory.get_context(session_id)
-```
+
 
 #### Long-Term Memory (User Preferences)
-```python
+python
 # Save important information
 long_term_memory.save_memory(
     user_id=1,
@@ -318,7 +318,7 @@ long_term_memory.save_memory(
 
 # Retrieve important memories
 memories = long_term_memory.get_important_memories(user_id, min_importance=3)
-```
+
 
 ### Error Handling
 
@@ -332,7 +332,7 @@ memories = long_term_memory.get_important_memories(user_id, min_importance=3)
 
 Settings are managed through `.env` file:
 
-```env
+env
 # Required - Get from https://aistudio.google.com/app/apikey
 GOOGLE_API_KEY=your_google_api_key_here
 
@@ -348,7 +348,7 @@ REDIS_URL=redis://localhost:6379/0
 
 # Admin emails (comma-separated)
 ADMIN_EMAILS=admin@company.com,manager@company.com
-```
+
 
 **Configuration Details:**
 
@@ -407,9 +407,9 @@ Configuration is loaded via `backend/config.py` using Pydantic Settings with aut
 **Streamlit Chat Interface:**
 
 1. Start the chat application:
-```bash
+bash
 streamlit run chat_app.py
-```
+
 
 2. **Test Google OAuth Login:**
    - Click "Sign in with Google"
@@ -447,7 +447,7 @@ streamlit run chat_app.py
 
 ## 📊 Project Structure
 
-```
+
 Onboarding_agent/
 ├── backend/
 │   ├── agent/               # LangGraph agentic workflow
@@ -498,7 +498,7 @@ Onboarding_agent/
 ├── .env.example             # Environment template
 ├── .env                     # Your configuration (gitignored)
 └── .gitignore               # Git ignore patterns
-```
+
 
 **Internal Rules Documents (15 files in `../Internal rules/` - project root):**
 - IT Administrator Responsibilities.md
