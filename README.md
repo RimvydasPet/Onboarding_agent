@@ -101,6 +101,7 @@ The AI Onboarding Assistant is a conversational AI agent designed to guide new u
 ### System Components
 
 
+```
 ┌─────────────────────────────────────────────────────────────┐
 │                  Streamlit Chat Interface                    │
 │         Beautiful UI with Progress Tracking                  │
