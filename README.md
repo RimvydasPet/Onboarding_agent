@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # 🤖 AI Onboarding Assistant
 
 An intelligent onboarding assistant powered by Google Gemini AI with dual-layer memory systems. This agent helps new users get started with your platform through conversational guidance, context-aware responses, and personalised onboarding experiences.
@@ -16,8 +15,6 @@ An intelligent onboarding assistant powered by Google Gemini AI with dual-layer 
 - [Project Structure](#project-structure)
 - [Contributing](#contributing)
 
----
-
 ## 🎯 Quick Overview
 
 This project is a **production-ready AI onboarding assistant** featuring:
@@ -30,8 +27,6 @@ This project is a **production-ready AI onboarding assistant** featuring:
 - 💬 **Advanced Chat with RAG** - Document retrieval with source citations
 - 📊 **Stage-Based Flow** - 5 onboarding stages with progress tracking
 - 👨‍💼 **Admin Dashboard** - Manage users and view onboarding statistics
-
----
 
 ## 🎯 Agent Purpose
 
@@ -59,8 +54,6 @@ The AI Onboarding Assistant is a conversational AI agent designed to guide new u
 2. **Product Teams**: Organizations wanting to improve their onboarding experience
 3. **Customer Success Teams**: Support teams looking to automate repetitive onboarding tasks
 4. **SaaS Companies**: Businesses with complex products requiring guided onboarding
-
----
 
 ## ✨ Features
 
@@ -102,8 +95,6 @@ The AI Onboarding Assistant is a conversational AI agent designed to guide new u
 - Conversation history integration
 - User preference tracking
 - Personalised recommendations
-
----
 
 ## 🏗️ Architecture
 
@@ -164,7 +155,6 @@ The AI Onboarding Assistant is a conversational AI agent designed to guide new u
 **Core:**
 - **Python 3.11+** - Core programming language
 
----
 
 ## 🚀 Installation
 
@@ -218,7 +208,6 @@ sudo systemctl start redis
 **Windows:**
 Download from https://redis.io/download
 
----
 
 ## 💻 Usage
 
@@ -281,7 +270,7 @@ The assistant will:
 - Save important preferences to long-term memory
 - Show sources for transparency with document names and relevance scores
 
----
+
 
 ## 🔧 Technical Implementation
 
@@ -375,7 +364,7 @@ ADMIN_EMAILS=admin@company.com,manager@company.com
 
 Configuration is loaded via `backend/config.py` using Pydantic Settings with automatic validation.
 
----
+
 
 ## 📚 Documentation
 
@@ -406,47 +395,6 @@ Configuration is loaded via `backend/config.py` using Pydantic Settings with aut
 - **Persistence**: SQL ensures important data isn't lost
 - **Flexibility**: Different storage for different use cases
 - **Scalability**: Can scale each layer independently
-
----
-
-## ✅ Task Requirements Coverage
-
-### 1. Agent Purpose ✅
-- ✅ Clear purpose defined: Onboarding assistance for new users
-- ✅ Usefulness explained: Reduces support load, improves retention
-- ✅ Target users identified: New users, product teams, support teams
-
-### 2. Core Functionality ✅
-- ✅ Main features implemented: Conversational AI, memory systems, stage management
-- ✅ Primary tasks effective: Answers questions, guides onboarding
-- ✅ User interactions included: Chat interface, progress tracking
-
-### 3. User Interface ✅
-- ✅ User-friendly interface: Streamlit chat app with clean design
-- ✅ Intuitive and easy to use: Clear conversation flow, visual progress
-- ✅ All functionalities accessible: Chat, sources, progress, settings
-
-### 4. Technical Implementation ✅
-- ✅ Appropriate tools: Google Gemini, Streamlit, SQLAlchemy, Redis
-- ✅ Error handling: Redis fallback, API error handling, validation
-- ✅ Real-world usage: Session management, persistence, scalability
-
-### 5. Documentation ✅
-- ✅ Clear usage documentation: Installation, usage, examples
-- ✅ Common use cases included
-- ✅ Technical decisions: Architecture rationale explained
-
-### Implementation Status
-
-#### ✅ Completed Features
-- **Conversational AI Interface**: Beautiful Streamlit chat with purple gradient UI
-- **Memory Systems**: Dual-layer (Redis + SQL) with fallback support
-- **Onboarding Flow**: 5-stage progression with tracking
-- **Session Management**: Unique session IDs and context preservation
-- **Error Handling**: Graceful degradation and user-friendly messages
-- **Progress Visualization**: Real-time metrics and stage indicators
-
----
 
 ## 🧪 Testing
 
@@ -491,7 +439,7 @@ streamlit run chat_app.py
    - Verify old conversation history is cleared
    - Confirm onboarding progress is maintained
 
----
+
 
 ## 📊 Project Structure
 
@@ -565,19 +513,16 @@ Onboarding_agent/
 - Google Workspace Setup Guide.md
 - Organisation Structure.md
 
----
 
 ## 🤝 Contributing
 
 This is a student project for the Turing College AI Engineering course. 
 
----
 
 ## 📄 License
 
 Educational project - Turing College
 
----
 
 ## 🙏 Acknowledgments
 
@@ -586,8 +531,7 @@ Educational project - Turing College
 - **Streamlit**: Rapid UI development
 - **SQLAlchemy**: Database ORM
 
----
-=======
+
 # 🤖 AI Onboarding Assistant
 
 An intelligent onboarding assistant powered by Google Gemini AI with dual-layer memory systems. This agent helps new users get started with your platform through conversational guidance, context-aware responses, and personalised onboarding experiences.
@@ -661,7 +605,7 @@ The AI Onboarding Assistant is a conversational AI agent designed to guide new u
   - Message history with TTL expiration
   - Session context tracking
   - Recent topics extraction
-  - Fallback to in-memory storage when Redis unavailable
+  - Fallback to in-memory storage when Redis is unavailable
   
 - **Long-Term Memory**: SQL-based persistent storage
   - User preferences and important facts
