@@ -1227,7 +1227,7 @@ def _generate_user_onboarding_pdf(user_id: int, session_id: str, facts: dict, me
             return f"{public_base}/{quote(source_path.name)}"
 
         if source_path.suffix.lower() == ".pdf":
-            return ""
+            return source_path.resolve().as_uri()
 
         pdf_bytes = _convert_to_pdf(str(source_path))
         if not pdf_bytes:
@@ -1237,7 +1237,7 @@ def _generate_user_onboarding_pdf(user_id: int, session_id: str, facts: dict, me
         pdf_cache_dir.mkdir(parents=True, exist_ok=True)
         target_pdf = pdf_cache_dir / f"{source_path.stem}.pdf"
         target_pdf.write_bytes(pdf_bytes)
-        return ""
+        return target_pdf.resolve().as_uri()
 
     def _resolve_doc_ref_to_path(doc_ref: str) -> Path | None:
         """Best-effort resolver for plain document names extracted from answers."""
@@ -1297,16 +1297,6 @@ def _generate_user_onboarding_pdf(user_id: int, session_id: str, facts: dict, me
             if len(common_words) >= min(2, len(doc_words), len(shown_words)):
                 return True
         return False
-
-    def _doc_key(text: str) -> str:
-        """Normalize document labels so duplicates across stages can be detected."""
-        normalized = str(text or "").strip().lower()
-        normalized = normalized.replace("_", " ").replace("-", " ")
-        for ext in (".pdf", ".md", ".markdown", ".txt"):
-            if normalized.endswith(ext):
-                normalized = normalized[: -len(ext)]
-        normalized = " ".join(normalized.split())
-        return normalized
     
     title_style = ParagraphStyle(
         'CustomTitle',
@@ -1388,8 +1378,6 @@ def _generate_user_onboarding_pdf(user_id: int, session_id: str, facts: dict, me
         'tools_systems': 'Tools & Systems',
         'training_needs': 'Training Needs'
     }
-
-    rendered_doc_keys_global: set[str] = set()
     
     for stage_key in stage_order:
         stage_facts = [k for k in facts.keys() if k.startswith(f"{stage_key}.")]
@@ -1406,55 +1394,31 @@ def _generate_user_onboarding_pdf(user_id: int, session_id: str, facts: dict, me
         links_data = links_by_stage.get(stage_key, {'urls': [], 'docs': []})
         
         if links_data['urls'] or links_data['docs']:
-            stage_doc_lines = []
+            story.append(Paragraph("<b>Related Documents:</b>", body_style))
+            
             shown_doc_names = set()
-
+            
             for url in sorted(set(links_data['urls'])):
                 link_text = _link_label(url).replace("&", "&amp;")
-                link_key = _doc_key(link_text)
-                if not link_key or link_key in rendered_doc_keys_global:
-                    continue
-
-                rendered_doc_keys_global.add(link_key)
-                shown_doc_names.add(link_key)
-
+                shown_doc_names.add(link_text.lower().replace('_', ' ').replace('-', ' ').replace('.pdf', '').replace('.md', ''))
                 resolved_href = _pdf_href_for_url(url)
                 if resolved_href:
                     safe_url = resolved_href.replace("&", "&amp;")
-                    stage_doc_lines.append(Paragraph(f'• <link href="{safe_url}" color="blue"><u>{link_text}</u></link>', body_style))
+                    story.append(Paragraph(f'• <link href="{safe_url}" color="blue"><u>{link_text}</u></link>', body_style))
                 else:
-                    stage_doc_lines.append(Paragraph(f"• {link_text}", body_style))
-
+                    story.append(Paragraph(f"• {link_text}", body_style))
+            
             for doc_ref in sorted(set(links_data['docs'])):
-                doc_ref_stripped = doc_ref.strip()
-                if not doc_ref_stripped:
-                    continue
-
-                doc_key = _doc_key(doc_ref_stripped)
-                if not doc_key or doc_key in rendered_doc_keys_global:
-                    continue
-
-                if _is_similar_doc_name_pdf(doc_ref_stripped, shown_doc_names):
-                    continue
-
-                doc_ref_text = doc_ref_stripped.replace("&", "&amp;")
-                resolved_doc_path = _resolve_doc_ref_to_path(doc_ref_stripped)
-                if resolved_doc_path is not None:
-                    resolved_href = _pdf_href_for_url(resolved_doc_path.as_uri())
-                    if resolved_href:
-                        safe_url = resolved_href.replace("&", "&amp;")
-                        stage_doc_lines.append(Paragraph(f'• <link href="{safe_url}" color="blue"><u>{doc_ref_text}</u></link>', body_style))
-                        rendered_doc_keys_global.add(doc_key)
-                        shown_doc_names.add(doc_key)
-                        continue
-
-                stage_doc_lines.append(Paragraph(f"• {doc_ref_text}", body_style))
-                rendered_doc_keys_global.add(doc_key)
-                shown_doc_names.add(doc_key)
-
-            if stage_doc_lines:
-                story.append(Paragraph("<b>Related Documents:</b>", body_style))
-                story.extend(stage_doc_lines)
+                if not _is_similar_doc_name_pdf(doc_ref.strip(), shown_doc_names):
+                    doc_ref_text = doc_ref.strip().replace("&", "&amp;")
+                    resolved_doc_path = _resolve_doc_ref_to_path(doc_ref)
+                    if resolved_doc_path is not None:
+                        resolved_href = _pdf_href_for_url(resolved_doc_path.as_uri())
+                        if resolved_href:
+                            safe_url = resolved_href.replace("&", "&amp;")
+                            story.append(Paragraph(f'• <link href="{safe_url}" color="blue"><u>{doc_ref_text}</u></link>', body_style))
+                            continue
+                    story.append(Paragraph(f"• {doc_ref_text}", body_style))
         else:
             story.append(Paragraph("<i>No specific documents referenced for this stage.</i>", summary_style))
         

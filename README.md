@@ -1,6 +1,6 @@
 # 🤖 AI Onboarding Assistant
 
-An intelligent onboarding assistant powered by Google Gemini AI with dual-layer memory systems. This agent helps new users get started with your platform through conversational guidance, context-aware responses, and personalised onboarding experiences.
+An intelligent onboarding assistant, powered by Google Gemini AI and featuring dual-layer memory systems. This agent helps new users get started with your platform through conversational guidance, context-aware responses, and personalised onboarding experiences.
 
 ## 📋 Table of Contents
 
@@ -32,7 +32,7 @@ This project is a **production-ready AI onboarding assistant** featuring:
 
 ### What is this agent?
 
-The AI Onboarding Assistant is a conversational AI agent designed to guide new users through the onboarding process of a platform or product. It combines advanced retrieval-augmented generation (RAG) with stateful conversation management to provide personalised, context-aware assistance.
+The AI Onboarding Assistant is a conversational AI agent designed to guide new users through the onboarding process of a platform or product. It combines advanced retrieval-augmented generation (RAG) with stateful conversation management to provide personalized, context-aware assistance.
 
 ### Why is this agent useful?
 
@@ -71,7 +71,7 @@ The AI Onboarding Assistant is a conversational AI agent designed to guide new u
   - Message history with TTL expiration
   - Session context tracking
   - Recent topics extraction
-  - Fallback to in-memory storage when Redis unavailable
+  - Fallback to in-memory storage when Redis is unavailable
   
 - **Long-Term Memory**: SQL-based persistent storage
   - User preferences and important facts
@@ -100,6 +100,7 @@ The AI Onboarding Assistant is a conversational AI agent designed to guide new u
 
 ### System Components
 
+
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                  Streamlit Chat Interface                    │
@@ -122,7 +123,7 @@ The AI Onboarding Assistant is a conversational AI agent designed to guide new u
 │   In-Memory)   │ │            │ │ - Profiles   │
 │                │ │            │ │ - Messages   │
 └────────────────┘ └────────────┘ └──────────────┘
-```
+
 
 ### Technology Stack
 
@@ -155,7 +156,6 @@ The AI Onboarding Assistant is a conversational AI agent designed to guide new u
 **Core:**
 - **Python 3.11+** - Core programming language
 
-
 ## 🚀 Installation
 
 ### Prerequisites
@@ -166,48 +166,47 @@ The AI Onboarding Assistant is a conversational AI agent designed to guide new u
 
 ### Step 1: Clone Repository
 
-```bash
+bash
 git clone <repository-url>
 cd Onboarding_agent
 git checkout feature/complete-onboarding-agent
-```
+
 
 ### Step 2: Install Dependencies
 
-```bash
+bash
 pip install -r requirements.txt
-```
+
 
 ### Step 3: Configure Environment
 
-```bash
+bash
 cp .env.example .env
-```
+
 
 Edit `.env` and add your Google API key from https://aistudio.google.com/app/apikey:
 
-```env
+env
 GOOGLE_API_KEY=your_google_api_key_here
 SECRET_KEY=your-secret-key-change-in-production
-```
+
 
 ### Step 4: (Optional) Install Redis
 
 **macOS:**
-```bash
+bash
 brew install redis
 brew services start redis
-```
+
 
 **Linux:**
-```bash
+bash
 sudo apt-get install redis-server
 sudo systemctl start redis
-```
+
 
 **Windows:**
 Download from https://redis.io/download
-
 
 ## 💻 Usage
 
@@ -215,9 +214,9 @@ Download from https://redis.io/download
 
 #### Start the Chat Application
 
-```bash
+bash
 streamlit run chat_app.py
-```
+
 
 Open your browser to `http://localhost:8501`
 
@@ -243,13 +242,13 @@ The interface will show:
 Once the app is running, try asking questions about internal company policies:
 
 **IT Administrator Questions:**
-- "What is IT Administrator's Responsibilities?"
+- "What are an IT Administrator's Responsibilities?"
 - "What are IT Administrator KPIs?"
-- "Explain IT onboarding credentials"
+- "Explain IT onboarding credentials."
 
 **Work Policy Questions:**
 - "What are remote and hybrid work guidelines?"
-- "Explain work environment requirements"
+- "Explain work environment requirements."
 - "What is the employee code of conduct?"
 
 **Security Questions:**
@@ -259,7 +258,7 @@ Once the app is running, try asking questions about internal company policies:
 
 **HR & Benefits Questions:**
 - "What are leave and time off policies?"
-- "Explain travel and expense reimbursement"
+- "Explain travel and expense reimbursement."
 - "What workplace safety rules apply?"
 
 The assistant will:
@@ -270,24 +269,22 @@ The assistant will:
 - Save important preferences to long-term memory
 - Show sources for transparency with document names and relevance scores
 
-
-
 ## 🔧 Technical Implementation
 
 ### RAG System (Internal Rules Documents)
 
 The RAG system automatically loads 15 internal rules documents from the `../Internal rules/` folder:
 
-```python
+python
 # Documents are loaded during initialisation
-from backend.rag.initialiser import load_internal_rules_documents
+from the backend. rag. initialiser import load_internal_rules_documents
 
 docs = load_internal_rules_documents()
 # Returns 15 Document objects with metadata:
 # - origin: "internal_rules"
 # - source: filename
 # - category: "internal_rules"
-```
+
 
 **Key Features:**
 - Automatic document discovery from the Internal rules folder
@@ -299,7 +296,7 @@ docs = load_internal_rules_documents()
 ### Memory Integration
 
 #### Short-Term Memory (Session Context)
-```python
+python
 # Save conversation
 short_term_memory.save_message(session_id, "user", message)
 short_term_memory.save_context(session_id, {"intent": "help"})
@@ -307,10 +304,10 @@ short_term_memory.save_context(session_id, {"intent": "help"})
 # Retrieve recent context
 messages = short_term_memory.get_messages(session_id, limit=5)
 context = short_term_memory.get_context(session_id)
-```
+
 
 #### Long-Term Memory (User Preferences)
-```python
+python
 # Save important information
 long_term_memory.save_memory(
     user_id=1,
@@ -322,7 +319,7 @@ long_term_memory.save_memory(
 
 # Retrieve important memories
 memories = long_term_memory.get_important_memories(user_id, min_importance=3)
-```
+
 
 ### Error Handling
 
@@ -336,7 +333,7 @@ memories = long_term_memory.get_important_memories(user_id, min_importance=3)
 
 Settings are managed through `.env` file:
 
-```env
+env
 # Required - Get from https://aistudio.google.com/app/apikey
 GOOGLE_API_KEY=your_google_api_key_here
 
@@ -352,7 +349,7 @@ REDIS_URL=redis://localhost:6379/0
 
 # Admin emails (comma-separated)
 ADMIN_EMAILS=admin@company.com,manager@company.com
-```
+
 
 **Configuration Details:**
 
@@ -363,8 +360,6 @@ ADMIN_EMAILS=admin@company.com,manager@company.com
 - **ADMIN_EMAILS**: Comma-separated list of admin user emails
 
 Configuration is loaded via `backend/config.py` using Pydantic Settings with automatic validation.
-
-
 
 ## 📚 Documentation
 
@@ -396,6 +391,16 @@ Configuration is loaded via `backend/config.py` using Pydantic Settings with aut
 - **Flexibility**: Different storage for different use cases
 - **Scalability**: Can scale each layer independently
 
+### Implementation Status
+
+#### ✅ Completed Features
+- **Conversational AI Interface**: Beautiful Streamlit chat with purple gradient UI
+- **Memory Systems**: Dual-layer (Redis + SQL) with fallback support
+- **Onboarding Flow**: 5-stage progression with tracking
+- **Session Management**: Unique session IDs and context preservation
+- **Error Handling**: Graceful degradation and user-friendly messages
+- **Progress Visualization**: Real-time metrics and stage indicators
+
 ## 🧪 Testing
 
 ### Manual Testing
@@ -403,9 +408,9 @@ Configuration is loaded via `backend/config.py` using Pydantic Settings with aut
 **Streamlit Chat Interface:**
 
 1. Start the chat application:
-```bash
+bash
 streamlit run chat_app.py
-```
+
 
 2. **Test Google OAuth Login:**
    - Click "Sign in with Google"
@@ -418,8 +423,8 @@ streamlit run chat_app.py
    - View progress in the sidebar
 
 4. **Test RAG Document Retrieval:**
-   - Ask: "What is IT Administrator's Responsibilities?"
-   - Ask: "Explain work environment"
+   - Ask: "What are the IT Administrator's Responsibilities?"
+   - Ask: "Explain work environment."
    - Ask: "What are remote and hybrid work guidelines?"
    - Verify sources are shown with document names and relevance scores
 
@@ -430,12 +435,12 @@ streamlit run chat_app.py
    - View system configuration
 
 6. **Test Memory Systems:**
-   - Ask follow-up questions to verify the conversation history is remembered
+   - Ask follow-up questions to verify that the conversation history is remembered
    - Complete a stage and revisit it to see saved progress
    - Check that user preferences are preserved across sessions
 
 7. **Test Session Management:**
-   - Use "🔄 New Session" button to start fresh
+   - Use the "🔄 New Session" button to start fresh
    - Verify old conversation history is cleared
    - Confirm onboarding progress is maintained
 
@@ -443,7 +448,7 @@ streamlit run chat_app.py
 
 ## 📊 Project Structure
 
-```
+
 Onboarding_agent/
 ├── backend/
 │   ├── agent/               # LangGraph agentic workflow
@@ -494,7 +499,7 @@ Onboarding_agent/
 ├── .env.example             # Environment template
 ├── .env                     # Your configuration (gitignored)
 └── .gitignore               # Git ignore patterns
-```
+
 
 **Internal Rules Documents (15 files in `../Internal rules/` - project root):**
 - IT Administrator Responsibilities.md
@@ -513,20 +518,7 @@ Onboarding_agent/
 - Google Workspace Setup Guide.md
 - Organisation Structure.md
 
-
 ## 🤝 Contributing
 
 This is a student project for the Turing College AI Engineering course. 
 
-
-## 📄 License
-
-Educational project - Turing College
-
-
-## 🙏 Acknowledgments
-
-- **LangChain**: LLM integration framework
-- **Google Gemini**: LLM capabilities
-- **Streamlit**: Rapid UI development
-- **SQLAlchemy**: Database ORM
